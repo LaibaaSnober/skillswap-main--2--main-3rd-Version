@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-
 import axios from 'axios';
 import toast from 'react-hot-toast';
-import { Search, MapPin, Clock, Filter, X } from 'lucide-react';
+import { Search, MapPin, Clock, Filter, X, Github, Star, CheckCircle } from 'lucide-react';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../config/api';
+import { Link } from 'react-router-dom';
 
 const Browse = () => {
   const [users, setUsers] = useState([]);
@@ -24,9 +24,18 @@ const Browse = () => {
   const [swapLoading, setSwapLoading] = useState(false);
   const USERS_PER_PAGE = 10;
   const [currentPage, setCurrentPage] = useState(1);
-  const publicUsers = users.filter(user => user.isPublic);
-  const totalPages = Math.ceil(publicUsers.length / USERS_PER_PAGE);
-  const paginatedUsers = publicUsers.slice((currentPage - 1) * USERS_PER_PAGE, currentPage * USERS_PER_PAGE);
+
+  // Filter and paginate users
+  const filteredUsers = users.filter(user => user.isPublic);
+  const sortedUsers = [...filteredUsers].sort((a, b) => {
+    // Sort by verification score (higher first) then by rating
+    const scoreA = a.verificationScore || 0;
+    const scoreB = b.verificationScore || 0;
+    if (scoreB !== scoreA) return scoreB - scoreA;
+    return (b.ratingAverage || 0) - (a.ratingAverage || 0);
+  });
+  const totalPages = Math.ceil(sortedUsers.length / USERS_PER_PAGE);
+  const paginatedUsers = sortedUsers.slice((currentPage - 1) * USERS_PER_PAGE, currentPage * USERS_PER_PAGE);
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -56,6 +65,7 @@ const Browse = () => {
   }, [fetchUsers]);
 
   const handleSearch = () => {
+    setCurrentPage(1);
     setFilters({
       skill: searchTerm,
       location,
@@ -68,16 +78,17 @@ const Browse = () => {
     setLocation('');
     setAvailability('');
     setFilters({});
+    setCurrentPage(1);
   };
 
   const getAvailabilityText = (user) => {
     const avail = user.availability;
     const options = [];
     
-    if (avail.weekdays) options.push('Weekdays');
-    if (avail.weekends) options.push('Weekends');
-    if (avail.evenings) options.push('Evenings');
-    if (avail.mornings) options.push('Mornings');
+    if (avail?.weekdays) options.push('Weekdays');
+    if (avail?.weekends) options.push('Weekends');
+    if (avail?.evenings) options.push('Evenings');
+    if (avail?.mornings) options.push('Mornings');
     
     return options.length > 0 ? options.join(', ') : 'Not specified';
   };
@@ -89,46 +100,74 @@ const Browse = () => {
     setSwapMessage('');
     setShowSwapModal(true);
   };
+
   const closeSwapModal = () => {
     setShowSwapModal(false);
     setSwapTarget(null);
   };
+
   const handleSendSwap = async () => {
     if (!mySkill || !theirSkill) {
       toast.error('Please select both skills');
       return;
     }
+    
     setSwapLoading(true);
     try {
-      await api.post('/swaps', {
+      // Find the full skill objects
+      const mySkillObj = currentUser?.skillsOffered?.find(s => s.name === mySkill);
+      const theirSkillObj = swapTarget?.skillsOffered?.find(s => s.name === theirSkill);
+      
+      const swapData = {
         recipientId: swapTarget._id,
-        requestedSkill: { name: theirSkill },
-        offeredSkill: { name: mySkill },
+        requestedSkill: {
+          name: theirSkill,
+          description: theirSkillObj?.description || ''
+        },
+        offeredSkill: {
+          name: mySkill,
+          description: mySkillObj?.description || ''
+        },
         message: swapMessage
-      });
-      toast.success('Swap request sent!');
+      };
+      
+      await api.post('/swaps', swapData);
+      toast.success('Swap request sent successfully!');
       closeSwapModal();
+      // Refresh swaps list if user navigates there
+      window.dispatchEvent(new Event('refresh-swaps'));
     } catch (error) {
+      console.error('Swap error:', error);
       toast.error(error.response?.data?.message || 'Failed to send swap request');
     } finally {
       setSwapLoading(false);
     }
   };
 
-  // Add a renderStars function for displaying stars
+  // Get badge based on verification score
+  const getVerificationBadge = (score, badge) => {
+    if (badge) return badge;
+    if (score >= 80) return { text: 'Gold Verified', color: 'bg-yellow-500/20 text-yellow-700 border-yellow-500' };
+    if (score >= 50) return { text: 'Silver Verified', color: 'bg-gray-500/20 text-gray-700 border-gray-500' };
+    if (score >= 25) return { text: 'Bronze Verified', color: 'bg-orange-500/20 text-orange-700 border-orange-500' };
+    return null;
+  };
+
+  // Render stars function
   const renderStars = (rating) => {
     const stars = [];
     const fullStars = Math.floor(rating);
     const hasHalfStar = rating % 1 !== 0;
+    
     for (let i = 0; i < fullStars; i++) {
-      stars.push(<svg key={i} className="w-4 h-4 fill-yellow-400 text-yellow-400" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.286 3.967a1 1 0 00.95.69h4.175c.969 0 1.371 1.24.588 1.81l-3.38 2.455a1 1 0 00-.364 1.118l1.287 3.966c.3.922-.755 1.688-1.54 1.118l-3.38-2.454a1 1 0 00-1.175 0l-3.38 2.454c-.784.57-1.838-.196-1.54-1.118l1.287-3.966a1 1 0 00-.364-1.118L2.05 9.394c-.783-.57-.38-1.81.588-1.81h4.175a1 1 0 00.95-.69l1.286-3.967z"/></svg>);
+      stars.push(<Star key={i} className="w-4 h-4 fill-yellow-400 text-yellow-400" />);
     }
     if (hasHalfStar) {
-      stars.push(<svg key="half" className="w-4 h-4 fill-yellow-400 text-yellow-400" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.286 3.967a1 1 0 00.95.69h4.175c.969 0 1.371 1.24.588 1.81l-3.38 2.455a1 1 0 00-.364 1.118l1.287 3.966c.3.922-.755 1.688-1.54 1.118l-3.38-2.454a1 1 0 00-1.175 0l-3.38 2.454c-.784.57-1.838-.196-1.54-1.118l1.287-3.966a1 1 0 00-.364-1.118L2.05 9.394c-.783-.57-.38-1.81.588-1.81h4.175a1 1 0 00.95-.69l1.286-3.967z"/></svg>);
+      stars.push(<Star key="half" className="w-4 h-4 fill-yellow-400 text-yellow-400" />);
     }
     const emptyStars = 5 - Math.ceil(rating);
     for (let i = 0; i < emptyStars; i++) {
-      stars.push(<svg key={`empty-${i}`} className="w-4 h-4 text-gray-300" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.286 3.967a1 1 0 00.95.69h4.175c.969 0 1.371 1.24.588 1.81l-3.38 2.455a1 1 0 00-.364 1.118l1.287 3.966c.3.922-.755 1.688-1.54 1.118l-3.38-2.454a1 1 0 00-1.175 0l-3.38 2.454c-.784.57-1.838-.196-1.54-1.118l1.287-3.966a1 1 0 00-.364-1.118L2.05 9.394c-.783-.57-.38-1.81.588-1.81h4.175a1 1 0 00.95-.69l1.286-3.967z"/></svg>);
+      stars.push(<Star key={`empty-${i}`} className="w-4 h-4 text-gray-300" />);
     }
     return stars;
   };
@@ -181,9 +220,7 @@ const Browse = () => {
           <div className="mt-6 pt-6 border-t border-brand-orchid">
             <div className="grid md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-brand-plum mb-1">
-                  Location
-                </label>
+                <label className="block text-sm font-medium text-brand-plum mb-1">Location</label>
                 <div className="relative">
                   <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-brand-mauve w-4 h-4" />
                   <input
@@ -196,9 +233,7 @@ const Browse = () => {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-brand-plum mb-1">
-                  Availability
-                </label>
+                <label className="block text-sm font-medium text-brand-plum mb-1">Availability</label>
                 <div className="relative">
                   <Clock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-brand-mauve w-4 h-4" />
                   <select
@@ -230,143 +265,174 @@ const Browse = () => {
 
       {/* User Cards */}
       <div className="w-full max-w-6xl mx-auto flex flex-col gap-8">
-        {publicUsers.length === 0 ? (
+        {sortedUsers.length === 0 ? (
           <div className="text-center py-12 animate-fade-in" style={{ animationDelay: '0.3s' }}>
             <p className="text-brand-orchid text-lg">No users found</p>
           </div>
         ) : (
-          paginatedUsers.map((user, idx) => (
-            <div
-              key={user._id}
-              className="w-full bg-white rounded-2xl shadow-card-lg border border-brand-orchid p-8 flex flex-row items-center gap-8 hover:shadow-2xl transition-shadow mx-auto relative group hover:scale-[1.02] transition-transform duration-200 animate-slide-up"
-              style={{ animationDelay: `${0.15 + idx * 0.07}s` }}
-            >
-              {/* Left: Profile photo */}
-              <div className="flex-shrink-0 flex flex-col items-center justify-center">
-                {user.profilePhoto ? (
-  <div className="flex flex-col items-center">
-    <img
-      src={user.profilePhoto}
-      alt={user.name}
-      className="w-24 h-24 rounded-full object-cover"
-    />
-
-  </div>
-) : (
-                  <div className="w-28 h-28 bg-brand-plum rounded-full flex items-center justify-center text-5xl text-white font-bold shadow-lg border-4 border-brand-plum">
-                    {user.name.charAt(0).toUpperCase()}
-                  </div>
-                )}
-              </div>
-              {/* Center: Info */}
-              <div className="flex-1 flex flex-col justify-center min-w-0">
-                <div className="flex items-center gap-4 flex-wrap">
-                  <h2 className="text-2xl font-bold text-brand-pink whitespace-nowrap">{user.name}</h2>
+          paginatedUsers.map((user, idx) => {
+            const verificationBadge = getVerificationBadge(user.verificationScore || 0, user.verificationBadge);
+            return (
+              <div
+                key={user._id}
+                className="w-full bg-white rounded-2xl shadow-card-lg border border-brand-orchid p-8 flex flex-col md:flex-row items-start md:items-center gap-6 hover:shadow-2xl transition-all duration-300 mx-auto relative group hover:scale-[1.01] animate-slide-up"
+                style={{ animationDelay: `${0.15 + idx * 0.07}s` }}
+              >
+                {/* Left: Profile photo */}
+                <Link to={`/user/${user._id}`} className="flex-shrink-0 flex flex-col items-center justify-center">
+                  {user.profilePhoto ? (
+                    <div className="flex flex-col items-center">
+                      <img
+                        src={user.profilePhoto.startsWith('http') ? user.profilePhoto : `http://localhost:5000${user.profilePhoto}`}
+                        alt={user.name}
+                        className="w-24 h-24 rounded-full object-cover border-4 border-brand-plum shadow-lg hover:scale-105 transition-transform"
+                        onError={(e) => {
+                          e.target.onerror = null;
+                          e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=7B466A&color=fff`;
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <div className="w-24 h-24 bg-gradient-to-br from-brand-plum to-brand-mauve rounded-full flex items-center justify-center text-3xl text-white font-bold shadow-lg border-4 border-brand-plum">
+                      {user.name.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                </Link>
+                
+                {/* Center: Info */}
+                <div className="flex-1 flex flex-col justify-center min-w-0">
+                  <Link to={`/user/${user._id}`} className="hover:opacity-80 transition-opacity">
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <h2 className="text-2xl font-bold text-brand-pink">{user.name}</h2>
+                      {verificationBadge && (
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold border ${verificationBadge.color}`}>
+                          <CheckCircle className="w-3 h-3" />
+                          {verificationBadge.text}
+                        </span>
+                      )}
+                      {user.githubConnected && !verificationBadge && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-600 border border-gray-300">
+                          <Github className="w-3 h-3" />
+                          GitHub
+                        </span>
+                      )}
+                    </div>
+                  </Link>
+                  
                   {user.location && (
-                    <div className="text-brand-orchid flex items-center">
+                    <div className="text-brand-orchid flex items-center mt-1">
                       <MapPin className="w-4 h-4 mr-1" />
                       <span className="truncate">{user.location}</span>
                     </div>
                   )}
-                </div>
-                <div className="mt-2 flex flex-col md:flex-row md:items-center gap-2 md:gap-8">
-                  <div>
-                    <span className="text-sm font-semibold text-green-700">Skills Offered:</span>
-                    <span className="ml-2 flex flex-wrap gap-2">
-                      {user.skillsOffered.slice(0, 3).map((skill, index) => (
-                        <span key={index} className="px-3 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800 border border-green-300">
-                          {skill.name}
-                        </span>
-                      ))}
-                      {user.skillsOffered.length > 3 && (
-                        <span className="text-xs text-green-700">
-                          +{user.skillsOffered.length - 3} more
-                        </span>
-                      )}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-sm font-semibold text-blue-700">Skill wanted:</span>
-                    <span className="ml-2 flex flex-wrap gap-2">
-                      {user.skillsWanted.slice(0, 3).map((skill, index) => (
-                        <span key={index} className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-300">
-                          {skill.name}
-                        </span>
-                      ))}
-                      {user.skillsWanted.length > 3 && (
-                        <span className="text-xs text-blue-700">
-                          +{user.skillsWanted.length - 3} more
-                        </span>
-                      )}
-                    </span>
-                  </div>
-                </div>
-                <div className="mt-3 flex items-center text-sm text-brand-orchid">
-                  <Clock className="w-4 h-4 mr-1" />
-                  <span>{getAvailabilityText(user)}</span>
-                </div>
-              </div>
-              {/* Right: Request/View Profile button and rating */}
-              <div className="flex flex-col items-end justify-between h-full min-w-[160px] gap-4">
-                {currentUser && user._id !== currentUser._id && (
-                  <button
-                    className="px-7 py-3 rounded-lg bg-brand-plum text-white font-bold shadow hover:bg-brand-mauve transition-colors text-lg"
-                    onClick={() => openSwapModal(user)}
-                  >
-                    Request Swap
-                  </button>
-                )}
-                <div className="text-right mt-4">
-                  {typeof user.ratingAverage === 'number' && user.ratingCount > 0 ? (
-                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-yellow-100 text-yellow-800 font-bold text-sm shadow">
-                      {renderStars(user.ratingAverage)}
-                      {user.ratingAverage.toFixed(1)}/5
-                      <span className="ml-1 text-xs text-gray-500">({user.ratingCount})</span>
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-gray-100 text-gray-500 font-semibold text-sm shadow">
-                      Not yet rated
-                    </span>
-                  )}
-                  {/* Reviews preview: show all in recentReviews */}
-                  {user.recentReviews && user.recentReviews.length > 0 && (
-                    <div className="mt-2 text-left">
-                      {user.recentReviews.map((review, i) => (
-                        <div key={i} className="mb-2 p-2 bg-gray-50 rounded shadow-sm border border-gray-100">
-                          <div className="flex items-center gap-2 mb-1">
-                            {review.reviewer && review.reviewer.profilePhoto ? (
-                              <img src={review.reviewer.profilePhoto} alt={review.reviewer.name} className="w-6 h-6 rounded-full object-cover" />
-                            ) : (
-                              <span className="w-6 h-6 rounded-full bg-gray-300 flex items-center justify-center text-xs font-bold text-gray-700">{review.reviewer && review.reviewer.name ? review.reviewer.name.charAt(0).toUpperCase() : '?'}</span>
-                            )}
-                            <span className="font-semibold text-xs text-brand-plum">{review.reviewer && review.reviewer.name}</span>
-                            <span className="text-xs text-yellow-600 font-bold">{renderStars(review.rating)}</span>
-                            <span className="text-xs text-gray-400 ml-2">{new Date(review.date).toLocaleDateString()}</span>
-                          </div>
-                          {review.comment && <div className="text-xs text-gray-700 italic">"{review.comment}"</div>}
-                        </div>
-                      ))}
+                  
+                  <div className="mt-3 flex flex-col md:flex-row md:items-center gap-2 md:gap-8">
+                    <div>
+                      <span className="text-sm font-semibold text-green-700">Skills Offered:</span>
+                      <span className="ml-2 flex flex-wrap gap-2">
+                        {user.skillsOffered?.slice(0, 3).map((skill, index) => (
+                          <span key={index} className="px-3 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800 border border-green-300">
+                            {skill.name}
+                          </span>
+                        ))}
+                        {user.skillsOffered?.length > 3 && (
+                          <span className="text-xs text-green-700">+{user.skillsOffered.length - 3} more</span>
+                        )}
+                      </span>
                     </div>
+                    <div>
+                      <span className="text-sm font-semibold text-blue-700">Skills Wanted:</span>
+                      <span className="ml-2 flex flex-wrap gap-2">
+                        {user.skillsWanted?.slice(0, 3).map((skill, index) => (
+                          <span key={index} className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-300">
+                            {skill.name}
+                          </span>
+                        ))}
+                        {user.skillsWanted?.length > 3 && (
+                          <span className="text-xs text-blue-700">+{user.skillsWanted.length - 3} more</span>
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-2 flex items-center gap-4 text-sm text-brand-orchid">
+                    <div className="flex items-center">
+                      <Clock className="w-4 h-4 mr-1" />
+                      <span>{getAvailabilityText(user)}</span>
+                    </div>
+                    {user.verificationScore > 0 && (
+                      <div className="flex items-center gap-1">
+                        <div className="w-16 bg-gray-200 rounded-full h-1.5">
+                          <div 
+                            className="bg-brand-plum h-1.5 rounded-full transition-all duration-500"
+                            style={{ width: `${Math.min(user.verificationScore, 100)}%` }}
+                          />
+                        </div>
+                        <span className="text-xs text-gray-500">{user.verificationScore}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                
+                {/* Right: Actions */}
+                <div className="flex flex-col items-end justify-between min-w-[180px] gap-3">
+                  <Link
+                    to={`/user/${user._id}`}
+                    className="px-6 py-2 rounded-lg bg-brand-orchid text-white font-semibold shadow hover:bg-brand-pink transition-colors text-center w-full"
+                  >
+                    View Profile
+                  </Link>
+                  
+                  {currentUser && user._id !== currentUser._id && (
+                    <button
+                      className="px-6 py-2 rounded-lg bg-brand-plum text-white font-bold shadow hover:bg-brand-mauve transition-colors w-full"
+                      onClick={() => openSwapModal(user)}
+                    >
+                      Request Swap
+                    </button>
                   )}
+                  
+                  <div className="text-right mt-2">
+                    {typeof user.ratingAverage === 'number' && user.ratingCount > 0 ? (
+                      <div className="flex flex-col items-end">
+                        <div className="flex items-center gap-1">
+                          {renderStars(user.ratingAverage)}
+                          <span className="ml-1 font-bold text-brand-plum">{user.ratingAverage.toFixed(1)}</span>
+                          <span className="text-xs text-gray-400">({user.ratingCount})</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-gray-400">No ratings yet</span>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
+
       {/* Swap Modal */}
       {showSwapModal && swapTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
           <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md animate-fade-in">
-            <h2 className="text-xl font-bold text-brand-plum mb-4">Request Swap with {swapTarget.name}</h2>
-            <form
-              onSubmit={e => { e.preventDefault(); handleSendSwap(); }}
-              className="space-y-4"
-            >
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-brand-plum">Request Swap with {swapTarget.name}</h2>
+              <button
+                onClick={closeSwapModal}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <form onSubmit={e => { e.preventDefault(); handleSendSwap(); }} className="space-y-4">
               <div>
-                <label className="block text-brand-plum font-semibold mb-1">Choose one of your offered skills</label>
+                <label className="block text-brand-plum font-semibold mb-1">
+                  Choose one of your offered skills
+                </label>
                 <select
-                  className="w-full px-4 py-2 rounded-lg border border-brand-orchid focus:ring-2 focus:ring-brand-pink outline-none bg-white/80"
+                  className="w-full px-4 py-2 rounded-lg border border-brand-orchid focus:ring-2 focus:ring-brand-pink outline-none bg-white"
                   value={mySkill}
                   onChange={e => setMySkill(e.target.value)}
                   required
@@ -377,10 +443,13 @@ const Browse = () => {
                   ))}
                 </select>
               </div>
+              
               <div>
-                <label className="block text-brand-orchid font-semibold mb-1">Choose one of their offered skills</label>
+                <label className="block text-brand-orchid font-semibold mb-1">
+                  Choose one of their offered skills
+                </label>
                 <select
-                  className="w-full px-4 py-2 rounded-lg border border-brand-orchid focus:ring-2 focus:ring-brand-pink outline-none bg-white/80"
+                  className="w-full px-4 py-2 rounded-lg border border-brand-orchid focus:ring-2 focus:ring-brand-pink outline-none bg-white"
                   value={theirSkill}
                   onChange={e => setTheirSkill(e.target.value)}
                   required
@@ -391,27 +460,29 @@ const Browse = () => {
                   ))}
                 </select>
               </div>
+              
               <div>
-                <label className="block text-brand-plum font-semibold mb-1">Message</label>
+                <label className="block text-brand-plum font-semibold mb-1">Message (optional)</label>
                 <textarea
-                  className="w-full px-4 py-2 rounded-lg border border-brand-orchid focus:ring-2 focus:ring-brand-pink outline-none bg-white/80"
+                  className="w-full px-4 py-2 rounded-lg border border-brand-orchid focus:ring-2 focus:ring-brand-pink outline-none bg-white"
                   value={swapMessage}
                   onChange={e => setSwapMessage(e.target.value)}
                   rows={3}
-                  placeholder="Add a message..."
+                  placeholder="Add a message to help them understand why you want to swap..."
                 />
               </div>
+              
               <div className="flex gap-4 mt-6">
                 <button
                   type="submit"
-                  className="bg-brand-plum text-white font-bold px-6 py-2 rounded-lg shadow hover:bg-brand-mauve transition-colors disabled:opacity-60"
+                  className="flex-1 bg-brand-plum text-white font-bold px-6 py-2 rounded-lg shadow hover:bg-brand-mauve transition-colors disabled:opacity-60"
                   disabled={swapLoading}
                 >
-                  {swapLoading ? 'Sending...' : 'Submit'}
+                  {swapLoading ? 'Sending...' : 'Send Request'}
                 </button>
                 <button
                   type="button"
-                  className="bg-white/80 text-brand-plum font-bold px-6 py-2 rounded-lg border border-brand-orchid shadow hover:bg-brand-orchid/30 transition-colors"
+                  className="flex-1 bg-gray-100 text-brand-plum font-bold px-6 py-2 rounded-lg border border-gray-300 hover:bg-gray-200 transition-colors"
                   onClick={closeSwapModal}
                   disabled={swapLoading}
                 >
@@ -422,32 +493,61 @@ const Browse = () => {
           </div>
         </div>
       )}
+
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="w-full max-w-6xl flex justify-center mt-8">
+        <div className="w-full max-w-6xl flex justify-center mt-10">
           <nav className="flex items-center gap-2">
             <button
-              className="px-3 py-1 rounded bg-brand-orchid text-white font-bold"
+              className="px-4 py-2 rounded-lg bg-brand-orchid/20 text-brand-plum font-bold hover:bg-brand-orchid hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               disabled={currentPage === 1}
             >
-              {'<'}
+              Previous
             </button>
-            {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-              <button
-                key={page}
-                className={`px-3 py-1 rounded border border-brand-orchid text-brand-plum font-bold hover:bg-brand-orchid hover:text-white transition-colors ${page === currentPage ? 'bg-brand-orchid text-white' : ''}`}
-                onClick={() => setCurrentPage(page)}
-              >
-                {page}
-              </button>
-            ))}
+            <div className="flex gap-1">
+              {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+                let pageNum;
+                if (totalPages <= 7) {
+                  pageNum = i + 1;
+                } else if (currentPage <= 4) {
+                  pageNum = i + 1;
+                  if (i === 6) pageNum = totalPages;
+                } else if (currentPage >= totalPages - 3) {
+                  pageNum = totalPages - 6 + i;
+                } else {
+                  pageNum = currentPage - 3 + i;
+                  if (i === 0) pageNum = 1;
+                  if (i === 5) pageNum = totalPages;
+                }
+                
+                if (pageNum && pageNum <= totalPages) {
+                  if (pageNum === 1 && i > 0 && pageNum !== currentPage - 3 && currentPage > 4) {
+                    return <span key={`ellipsis-${i}`} className="px-2">...</span>;
+                  }
+                  return (
+                    <button
+                      key={pageNum}
+                      className={`w-10 h-10 rounded-lg font-bold transition-colors ${
+                        pageNum === currentPage
+                          ? 'bg-brand-orchid text-white'
+                          : 'border border-brand-orchid text-brand-plum hover:bg-brand-orchid/20'
+                      }`}
+                      onClick={() => setCurrentPage(pageNum)}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                }
+                return null;
+              })}
+            </div>
             <button
-              className="px-3 py-1 rounded bg-brand-orchid text-white font-bold"
+              className="px-4 py-2 rounded-lg bg-brand-orchid/20 text-brand-plum font-bold hover:bg-brand-orchid hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages}
             >
-              {'>'}
+              Next
             </button>
           </nav>
         </div>

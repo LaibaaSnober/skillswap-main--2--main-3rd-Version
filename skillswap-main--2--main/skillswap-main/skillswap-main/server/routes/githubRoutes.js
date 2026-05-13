@@ -1,17 +1,36 @@
 const express = require('express');
-
 const router = express.Router();
-
+const auth = require('../middleware/auth');
 const {
-  connectGitHub
+  connectGitHub,
+  disconnectGitHub,
+  getGitHubStatus
 } = require('../controllers/githubController');
 
-const authMiddleware = require('../middleware/auth');
+// Connect GitHub account
+router.post('/connect', auth, connectGitHub);
 
-router.post(
-  '/connect',
-  authMiddleware,
-  connectGitHub
-);
+// Disconnect GitHub account
+router.delete('/disconnect', auth, disconnectGitHub);
+
+// Get GitHub status for a user (public)
+router.get('/status/:userId', getGitHubStatus);
+
+// Get current user's GitHub status
+router.get('/me', auth, async (req, res) => {
+  try {
+    res.json({
+      githubConnected: req.user.githubConnected,
+      githubUsername: req.user.githubUsername,
+      verifiedSkills: req.user.verifiedSkills || [],
+      verificationScore: req.user.verificationScore || 0,
+      verificationBadge: req.user.verificationBadge || '⚪ Novice',
+      githubStats: req.user.githubStats
+    });
+  } catch (error) {
+    console.error('Get GitHub status error:', error);
+    res.status(500).json({ message: 'Failed to get GitHub status' });
+  }
+});
 
 module.exports = router;

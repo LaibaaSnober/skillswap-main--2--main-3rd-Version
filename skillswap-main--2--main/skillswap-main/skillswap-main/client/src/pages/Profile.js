@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-import { Edit, X, MapPin, Clock, Star, User, LogOut, Camera } from 'lucide-react';
+import { Edit, X, MapPin, Clock, Star, User, LogOut, Camera, CheckCircle, Github, ExternalLink } from 'lucide-react';
 import LoadingSpinner from '../components/LoadingSpinner';
 import api from '../config/api';
 import { useNavigate } from 'react-router-dom';
@@ -12,40 +12,79 @@ const Profile = () => {
   const { user, updateUser, logout } = useAuth();
   const [githubUsername, setGithubUsername] = useState('');
   const [gitLoading, setGitLoading] = useState(false);
-const connectGitHub = async () => {
-  if (!githubUsername.trim()) {
-    toast.error("Please enter GitHub username");
-    return;
-  }
+  const [gitDisconnecting, setGitDisconnecting] = useState(false);
+  const [showGitHubModal, setShowGitHubModal] = useState(false);
+  const [gitHubStats, setGitHubStats] = useState(null);
+  
+  // Connect GitHub
+  const connectGitHub = async () => {
+    if (!githubUsername.trim()) {
+      toast.error("Please enter GitHub username");
+      return;
+    }
 
-  setGitLoading(true);
-
-  try {
-    const token = localStorage.getItem('token');
-
-    const response = await axios.post(
-      'http://localhost:5000/api/github/connect',
-      { githubUsername },
-      {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
+    setGitLoading(true);
+    try {
+      const response = await api.post('/github/connect', { 
+        githubUsername: githubUsername.trim() 
+      });
+      
+      if (response.data.success) {
+        updateUser(response.data.user);
+        setGitHubStats(response.data.stats);
+        toast.success(`GitHub Connected! ${response.data.stats?.verifiedSkills?.length || 0} skills verified.`);
+        setShowGitHubModal(false);
+        setGithubUsername('');
+      } else {
+        toast.error(response.data.message || "Connection failed");
       }
-    );
+    } catch (error) {
+      console.error('GitHub connection error:', error);
+      toast.error(error.response?.data?.message || "Connection Failed");
+    } finally {
+      setGitLoading(false);
+    }
+  };
 
-    // ✅ IMPORTANT: update UI instantly
-    updateUser(response.data.user);
+  // Disconnect GitHub
+  const disconnectGitHub = async () => {
+    if (!window.confirm('Are you sure you want to disconnect GitHub? This will remove all verified skills and your verification score will reset to 0.')) {
+      return;
+    }
+    
+    setGitDisconnecting(true);
+    try {
+      const response = await api.delete('/github/disconnect');
+      if (response.data.success) {
+        updateUser(response.data.user);
+        setGitHubStats(null);
+        toast.success('GitHub disconnected successfully');
+      }
+    } catch (error) {
+      console.error('GitHub disconnect error:', error);
+      toast.error(error.response?.data?.message || 'Failed to disconnect GitHub');
+    } finally {
+      setGitDisconnecting(false);
+    }
+  };
 
-    toast.success("GitHub Connected Successfully");
+  // Get badge based on verification score
+  const getBadge = (score = 0, badge = null) => {
+    if (badge) return badge;
+    if (score >= 80) return "🥇 Gold Verified";
+    if (score >= 50) return "🥈 Silver Verified";
+    if (score >= 25) return "🥉 Bronze Verified";
+    return "⚪ Novice";
+  };
 
-  } catch (error) {
-    console.log(error);
-    toast.error(error.response?.data?.message || "Connection Failed");
+  // Get badge color
+  const getBadgeColor = (score = 0) => {
+    if (score >= 80) return "bg-yellow-500/20 text-yellow-400 border-yellow-500/30";
+    if (score >= 50) return "bg-gray-500/20 text-gray-300 border-gray-500/30";
+    if (score >= 25) return "bg-orange-500/20 text-orange-400 border-orange-500/30";
+    return "bg-blue-500/20 text-blue-400 border-blue-500/30";
+  };
 
-  } finally {
-    setGitLoading(false);
-  }
-};
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState(false);
   const [profileData, setProfileData] = useState({
@@ -239,11 +278,6 @@ const connectGitHub = async () => {
   if (!user) {
     return <LoadingSpinner size="lg" className="py-20" />;
   }
-  const getBadge = (score = 0) => {
-  if (score > 80) return "Gold 🥇";
-  if (score > 50) return "Silver 🥈";
-  return "Bronze 🥉";
-};
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-start bg-white pt-2 pb-10 px-2">
@@ -252,6 +286,7 @@ const connectGitHub = async () => {
         <h1 className="text-4xl font-bold text-brand-plum mb-2">Hi, {user.name}</h1>
         <p className="text-lg text-brand-orchid">Welcome back! Ready to swap some skills today?</p>
       </div>
+      
       {/* Stat Cards */}
       <div className="w-full max-w-6xl grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
         <div className="rounded-2xl shadow bg-[#5D3C64] text-white p-6 flex flex-col items-center">
@@ -271,6 +306,7 @@ const connectGitHub = async () => {
           <span className="mt-2 text-sm font-medium">Rating</span>
         </div>
       </div>
+      
       {/* Main Card with all details */}
       <div className="w-full max-w-6xl bg-white rounded-3xl shadow-lg border-2 border-[#9F6496] p-12 flex flex-col gap-10 animate-fade-in transition-all duration-500 relative">
         {/* Edit button at top right */}
@@ -285,7 +321,7 @@ const connectGitHub = async () => {
           </button>
         )}
         
-        {/* Profile Info - FIXED IMAGE DISPLAY */}
+        {/* Profile Info */}
         <div className="flex flex-col md:flex-row items-center gap-8 mb-6 relative">
           <div className="flex-shrink-0 flex flex-col items-center gap-2 relative">
             {user.profilePhoto && !imageError ? (
@@ -301,12 +337,10 @@ const connectGitHub = async () => {
                 />
                 {editing && (
                   <div className="absolute -top-2 -right-2 flex gap-1">
-                    {/* Upload Button */}
                     <label className="bg-[#D391B0] rounded-full p-2 cursor-pointer shadow-lg hover:bg-[#BA6E8F] transition-colors flex items-center justify-center">
                       <Camera className="w-4 h-4 text-[#0C0420]" />
                       <input type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} disabled={photoUploading} />
                     </label>
-                    {/* Remove Button */}
                     <button
                       onClick={handleRemoveImage}
                       className="bg-red-500 rounded-full p-2 cursor-pointer shadow-lg hover:bg-red-600 transition-colors flex items-center justify-center"
@@ -462,8 +496,8 @@ const connectGitHub = async () => {
                   <div className="text-[#5D3C64] mb-2">{user.location}</div>
                 )}
                 <div className="flex items-center gap-2 mb-2">
-                  {renderStars(user.rating && typeof user.rating.average === 'number' ? user.rating.average : 5.0)}
-                  <span className="text-sm text-[#9F6496]">({user.rating && typeof user.rating.count === 'number' ? user.rating.count : 0} reviews)</span>
+                  {renderStars(user.ratingAverage || 5.0)}
+                  <span className="text-sm text-[#9F6496]">({user.ratingCount || 0} reviews)</span>
                 </div>
                 {user.bio && (
                   <div className="text-md text-[#0C0420] mb-2">{user.bio}</div>
@@ -628,60 +662,119 @@ const connectGitHub = async () => {
             </div>
           </div>
         </div>
-        <div className="bg-[#0C0420] rounded-2xl p-6 mt-6 text-white">
+        
+        {/* GitHub Skill Verification Section - UPDATED */}
+        <div className="bg-gradient-to-r from-[#0C0420] to-[#2C1A3A] rounded-2xl p-6 mt-6 text-white">
+          <div className="flex justify-between items-center mb-4 flex-wrap gap-4">
+            <h3 className="text-2xl font-bold flex items-center gap-2">
+              <Github className="w-7 h-7" />
+              GitHub Skill Verification
+            </h3>
+            {user?.githubConnected ? (
+              <button
+                onClick={disconnectGitHub}
+                disabled={gitDisconnecting}
+                className="bg-red-500/20 hover:bg-red-500/30 text-red-300 px-4 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
+              >
+                {gitDisconnecting ? 'Disconnecting...' : 'Disconnect GitHub'}
+              </button>
+            ) : (
+              <button
+                onClick={() => setShowGitHubModal(true)}
+                className="bg-[#D391B0] text-[#0C0420] px-4 py-2 rounded-lg text-sm font-bold hover:bg-[#BA6E8F] transition-colors"
+              >
+                Connect GitHub
+              </button>
+            )}
+          </div>
 
-          <h3 className="text-2xl font-bold mb-4">
-            GitHub Skill Verification
-          </h3>
-
-          <input
-            type="text"
-            placeholder="Enter GitHub Username"
-            value={githubUsername}
-            onChange={(e) =>
-              setGithubUsername(e.target.value)
-            }
-            className="w-full px-4 py-3 rounded-lg text-black"
-          />
-
-          <button
-              onClick={connectGitHub}
-              disabled={gitLoading}
-              className="bg-[#D391B0] text-[#0C0420] px-6 py-3 rounded-lg mt-3 font-bold disabled:opacity-50"
-            >
-              {gitLoading ? "Connecting..." : "Connect GitHub"}
-            </button>
-          <div className="mt-5">
-
-              <h3 className="font-bold text-lg">
-                Verified Skills
-              </h3>
-
-              <div className="flex flex-wrap gap-2 mt-2">
-                {user?.verifiedSkills?.length > 0 ? (
-                  user.verifiedSkills.map((skill, index) => (
-                    <span
-                      key={index}
-                      className="bg-green-100 text-green-700 border border-green-400 px-3 py-1 rounded-full text-xs font-semibold"
+          {user?.githubConnected ? (
+            <>
+              <div className="mb-4 p-4 bg-white/10 rounded-lg">
+                <div className="flex items-center justify-between flex-wrap gap-4">
+                  <div>
+                    <p className="text-sm text-gray-300">Connected as</p>
+                    <a 
+                      href={user.githubProfile} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-[#D391B0] hover:underline font-semibold flex items-center gap-1"
                     >
-                      {skill} ✅ Verified
-                    </span>
-                  ))
-                ) : (
-                  <p className="text-gray-400 mt-2">No verified skills yet</p>
-                )}
-
+                      @{user.githubUsername}
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+                  <div className="flex gap-6">
+                    <div className="text-center">
+                      <p className="text-2xl font-bold">{user.githubStats?.publicRepos || 0}</p>
+                      <p className="text-xs text-gray-300">Repos</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-2xl font-bold">{user.githubStats?.followers || 0}</p>
+                      <p className="text-xs text-gray-300">Followers</p>
+                    </div>
+                  </div>
+                </div>
               </div>
 
+              <div className="mb-4">
+                <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+                  <h4 className="font-bold text-lg">Verified Skills</h4>
+                  <div className="text-right">
+                    <span className="text-2xl font-bold text-[#D391B0]">{user.verificationScore || 0}</span>
+                    <span className="text-sm text-gray-300">/100</span>
+                  </div>
+                </div>
+                <div className="w-full bg-white/20 rounded-full h-2 mb-2">
+                  <div 
+                    className="bg-[#D391B0] h-2 rounded-full transition-all duration-500"
+                    style={{ width: `${Math.min(user.verificationScore || 0, 100)}%` }}
+                  />
+                </div>
+                <div className="flex justify-between items-center mb-3">
+                  <span className="text-sm text-gray-300">Verification Score</span>
+                  <span className={`px-2 py-1 rounded-full text-xs font-semibold border ${getBadgeColor(user.verificationScore || 0)}`}>
+                    {getBadge(user.verificationScore || 0, user.verificationBadge)}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {user?.verifiedSkills?.length > 0 ? (
+                    user.verifiedSkills.map((skill, index) => (
+                      <span
+                        key={index}
+                        className="bg-green-500/20 text-green-300 border border-green-500/30 px-3 py-1.5 rounded-full text-sm font-semibold flex items-center gap-1"
+                      >
+                        <CheckCircle className="w-3 h-3" />
+                        {skill}
+                      </span>
+                    ))
+                  ) : (
+                    <p className="text-gray-400 text-sm">No verified skills detected. Connect GitHub to analyze your repositories.</p>
+                  )}
+                </div>
+              </div>
+
+              {user.githubStats?.repos?.length > 0 && (
+                <details className="mt-3">
+                  <summary className="cursor-pointer text-sm text-gray-300 hover:text-white">View detected repositories</summary>
+                  <div className="mt-2 space-y-1 max-h-40 overflow-y-auto">
+                    {user.githubStats.repos.map((repo, idx) => (
+                      <div key={idx} className="text-xs text-gray-400 py-1 border-b border-white/10">
+                        • <span className="text-white">{repo.name}</span> {repo.language && `(${repo.language})`} {repo.stars > 0 && `⭐ ${repo.stars}`}
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
+            </>
+          ) : (
+            <div className="text-center py-6 text-gray-400">
+              <Github className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>Connect your GitHub account to automatically verify your skills</p>
+              <p className="text-sm mt-2">We'll analyze your repositories to detect programming languages and frameworks</p>
+              <p className="text-xs mt-4 text-gray-500">Your verification score helps build trust in the community</p>
             </div>
-            <div className="mt-3 text-sm text-gray-300">
-  GitHub Score: {user?.verificationScore || 0}
-</div>
-
-<div className="mt-2 font-bold text-white">
-  Badge: {getBadge(user?.verificationScore || 0)}
-</div>
-
+          )}
         </div>
         
         {/* Availability Section */}
@@ -809,6 +902,62 @@ const connectGitHub = async () => {
           </button>
         </div>
       </div>
+
+      {/* GitHub Connection Modal */}
+      {showGitHubModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-2xl font-bold text-[#0C0420]">Connect GitHub</h2>
+              <button
+                onClick={() => setShowGitHubModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <p className="text-gray-600 mb-4">Enter your GitHub username to verify your skills</p>
+            <div className="relative">
+              <Github className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <input
+                type="text"
+                placeholder="e.g., octocat"
+                value={githubUsername}
+                onChange={(e) => setGithubUsername(e.target.value)}
+                className="w-full pl-10 pr-4 py-3 rounded-lg border border-gray-300 focus:border-[#7B466A] focus:ring-2 focus:ring-[#7B466A]/20 outline-none"
+              />
+            </div>
+            <div className="mt-6 flex gap-4">
+              <button
+                onClick={connectGitHub}
+                disabled={gitLoading}
+                className="flex-1 bg-[#7B466A] text-white font-bold px-6 py-2 rounded-lg hover:bg-[#5D3C64] transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {gitLoading ? (
+                  <>
+                    <LoadingSpinner size="sm" />
+                    Connecting...
+                  </>
+                ) : (
+                  <>
+                    <Github className="w-4 h-4" />
+                    Connect
+                  </>
+                )}
+              </button>
+              <button
+                onClick={() => setShowGitHubModal(false)}
+                className="flex-1 border border-gray-300 text-gray-700 font-bold px-6 py-2 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+            <p className="text-xs text-gray-400 mt-4 text-center">
+              We'll analyze your public repositories to detect programming languages and frameworks
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
