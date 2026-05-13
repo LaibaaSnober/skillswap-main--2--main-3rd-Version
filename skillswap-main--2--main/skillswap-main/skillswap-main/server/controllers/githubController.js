@@ -17,7 +17,6 @@ const languageToSkill = {
   'HTML': 'HTML/CSS',
   'CSS': 'HTML/CSS',
   'Vue': 'Vue.js',
-  'React': 'React',
   'Angular': 'Angular',
   'Django': 'Django',
   'Flask': 'Flask',
@@ -32,26 +31,33 @@ const languageToSkill = {
   'Kubernetes': 'Kubernetes',
   'AWS': 'AWS',
   'Git': 'Git',
-  'GraphQL': 'GraphQL'
+  'GraphQL': 'GraphQL',
+  'React': 'React',
+  'React Native': 'React Native',
+  'Flutter': 'Flutter',
+  'TensorFlow': 'TensorFlow',
+  'PyTorch': 'PyTorch',
+  'AI/ML': 'AI/ML',
+  'DevOps': 'DevOps'
 };
 
 // Calculate verification score
 const calculateScore = (repos, followers, publicRepos, verifiedSkills) => {
   let score = 0;
   
-  // Base score from verified skills (10 points each)
-  score += verifiedSkills.length * 10;
+  // Base score from verified skills (15 points each)
+  score += verifiedSkills.length * 15;
   
   // Repository count score (max 30 points)
   score += Math.min(publicRepos, 15) * 2;
   
-  // Followers score (max 20 points)
-  score += Math.min(Math.floor(followers / 5), 20);
+  // Followers score (max 25 points)
+  score += Math.min(Math.floor(followers / 4), 25);
   
-  // Additional points for having multiple skills (bonus)
-  if (verifiedSkills.length >= 5) score += 15;
-  else if (verifiedSkills.length >= 3) score += 10;
-  else if (verifiedSkills.length >= 1) score += 5;
+  // Additional bonus for multiple skills
+  if (verifiedSkills.length >= 5) score += 20;
+  else if (verifiedSkills.length >= 3) score += 15;
+  else if (verifiedSkills.length >= 1) score += 10;
   
   return Math.min(score, 100);
 };
@@ -62,6 +68,12 @@ const getBadge = (score) => {
   if (score >= 50) return '🥈 Silver Verified';
   if (score >= 25) return '🥉 Bronze Verified';
   return '⚪ Novice';
+};
+
+// Check if a skill already exists in user's offered skills
+const skillExists = (skills, skillName) => {
+  if (!skills || !Array.isArray(skills)) return false;
+  return skills.some(s => s.name && s.name.toLowerCase() === skillName.toLowerCase());
 };
 
 // Connect GitHub
@@ -79,13 +91,11 @@ const connectGitHub = async (req, res) => {
       });
     }
 
-    // Clean the username
     const cleanUsername = githubUsername.trim().replace('@', '');
 
-    // Fetch GitHub profile with better error handling
+    // Fetch GitHub profile
     let profileResponse;
     try {
-      console.log(`Fetching GitHub profile for: ${cleanUsername}`);
       profileResponse = await axios.get(`https://api.github.com/users/${cleanUsername}`, {
         headers: {
           'User-Agent': 'SkillSwap-App',
@@ -94,7 +104,6 @@ const connectGitHub = async (req, res) => {
         timeout: 10000
       });
     } catch (error) {
-      console.error('GitHub profile fetch error:', error.response?.status, error.response?.data);
       if (error.response?.status === 404) {
         return res.status(404).json({
           success: false,
@@ -112,25 +121,19 @@ const connectGitHub = async (req, res) => {
 
     const profile = profileResponse.data;
 
-    // Fetch user's repositories
+    // Fetch repositories
     let reposResponse;
     try {
-      console.log(`Fetching repositories for: ${cleanUsername}`);
       reposResponse = await axios.get(`https://api.github.com/users/${cleanUsername}/repos`, {
         headers: {
           'User-Agent': 'SkillSwap-App',
           'Accept': 'application/vnd.github.v3+json'
         },
-        params: {
-          per_page: 100,
-          sort: 'updated',
-          direction: 'desc'
-        },
+        params: { per_page: 100, sort: 'updated', direction: 'desc' },
         timeout: 10000
       });
     } catch (error) {
-      console.error('GitHub repos fetch error:', error.message);
-      // Continue with empty repos if fetch fails
+      console.log('Repo fetch error, continuing with empty repos');
       reposResponse = { data: [] };
     }
 
@@ -139,38 +142,105 @@ const connectGitHub = async (req, res) => {
     
     // Detect skills from repositories
     const detectedSkills = new Set();
-    const languageCount = {};
 
     repos.forEach(repo => {
       // Add language as skill
       if (repo.language && languageToSkill[repo.language]) {
-        const skill = languageToSkill[repo.language];
-        detectedSkills.add(skill);
-        languageCount[skill] = (languageCount[skill] || 0) + 1;
+        detectedSkills.add(languageToSkill[repo.language]);
       }
       
-      // Check repo name for framework detection
+      // Check repo name/framework detection
       const repoName = repo.name.toLowerCase();
       const repoDesc = (repo.description || '').toLowerCase();
       
-      if (repoName.includes('react') || repoDesc.includes('react')) detectedSkills.add('React');
-      if (repoName.includes('vue') || repoDesc.includes('vue')) detectedSkills.add('Vue.js');
-      if (repoName.includes('angular') || repoDesc.includes('angular')) detectedSkills.add('Angular');
-      if (repoName.includes('node') || repoDesc.includes('node')) detectedSkills.add('Node.js');
-      if (repoName.includes('express') || repoDesc.includes('express')) detectedSkills.add('Express.js');
-      if (repoName.includes('django') || repoDesc.includes('django')) detectedSkills.add('Django');
-      if (repoName.includes('docker') || repoDesc.includes('docker')) detectedSkills.add('Docker');
-      if (repoName.includes('kubernetes') || repoDesc.includes('k8s')) detectedSkills.add('Kubernetes');
-      if (repoName.includes('aws') || repoDesc.includes('aws')) detectedSkills.add('AWS');
-      if (repoName.includes('graphql') || repoDesc.includes('graphql')) detectedSkills.add('GraphQL');
-      if (repoName.includes('mongodb') || repoDesc.includes('mongo')) detectedSkills.add('MongoDB');
-      if (repoName.includes('postgres') || repoDesc.includes('postgres')) detectedSkills.add('PostgreSQL');
-      if (repoName.includes('docker') || repoDesc.includes('docker')) detectedSkills.add('Docker');
-      if (repoName.includes('flutter') || repoDesc.includes('flutter')) detectedSkills.add('Flutter');
-      if (repoName.includes('react-native') || repoDesc.includes('react native')) detectedSkills.add('React Native');
+      const frameworkMap = {
+        'react': 'React',
+        'vue': 'Vue.js',
+        'angular': 'Angular',
+        'node': 'Node.js',
+        'express': 'Express.js',
+        'django': 'Django',
+        'flask': 'Flask',
+        'docker': 'Docker',
+        'kubernetes': 'Kubernetes',
+        'aws': 'AWS',
+        'graphql': 'GraphQL',
+        'mongodb': 'MongoDB',
+        'postgres': 'PostgreSQL',
+        'mysql': 'MySQL',
+        'flutter': 'Flutter',
+        'tensorflow': 'TensorFlow',
+        'pytorch': 'PyTorch',
+        'next': 'Next.js',
+        'typescript': 'TypeScript',
+        'javascript': 'JavaScript',
+        'python': 'Python',
+        'java': 'Java',
+        'php': 'PHP',
+        'ruby': 'Ruby',
+        'go': 'Go',
+        'rust': 'Rust',
+        'swift': 'Swift',
+        'kotlin': 'Kotlin'
+      };
+      
+      for (const [key, value] of Object.entries(frameworkMap)) {
+        if (repoName.includes(key) || repoDesc.includes(key)) {
+          detectedSkills.add(value);
+        }
+      }
     });
 
     const verifiedSkills = Array.from(detectedSkills);
+    console.log(`Detected skills: ${verifiedSkills.join(', ')}`);
+    
+    // Fetch current user
+    let currentUser = await User.findById(userId);
+    if (!currentUser) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+    
+    // Create updated skills offered array
+    let updatedSkillsOffered = currentUser.skillsOffered ? [...currentUser.skillsOffered] : [];
+    const newSkillsAdded = [];
+    const updatedExistingSkills = [];
+    
+    // Process each verified skill
+    for (const skillName of verifiedSkills) {
+      // Check if skill already exists in offered skills
+      const existingSkillIndex = updatedSkillsOffered.findIndex(s => 
+        s.name && s.name.toLowerCase() === skillName.toLowerCase()
+      );
+      
+      if (existingSkillIndex === -1) {
+        // Add as new skill with verified flag
+        const newSkill = {
+          name: skillName,
+          description: `✓ Verified via GitHub - ${skillName} expertise detected from repositories`,
+          proficiency: 'Verified',
+          verified: true,
+          verifiedVia: 'github',
+          verifiedDate: new Date()
+        };
+        updatedSkillsOffered.push(newSkill);
+        newSkillsAdded.push(skillName);
+        console.log(`Added new verified skill: ${skillName}`);
+      } else {
+        // Update existing skill to mark as verified if not already
+        if (!updatedSkillsOffered[existingSkillIndex].verified) {
+          updatedSkillsOffered[existingSkillIndex].verified = true;
+          updatedSkillsOffered[existingSkillIndex].verifiedVia = 'github';
+          updatedSkillsOffered[existingSkillIndex].verifiedDate = new Date();
+          updatedSkillsOffered[existingSkillIndex].proficiency = 'Verified';
+          updatedSkillsOffered[existingSkillIndex].description = `✓ Verified via GitHub - ${skillName} expertise detected from repositories`;
+          updatedExistingSkills.push(skillName);
+          console.log(`Updated existing skill to verified: ${skillName}`);
+        }
+      }
+    }
     
     // Calculate score and badge
     const verificationScore = calculateScore(
@@ -182,16 +252,16 @@ const connectGitHub = async (req, res) => {
     
     const badge = getBadge(verificationScore);
 
-    // Get top 5 repos for display
+    // Get top repos for display
     const topRepos = repos.slice(0, 10).map(r => ({
       name: r.name,
       language: r.language,
-      stars: r.stargazers_count,
+      stars: r.stargazers_count || 0,
       url: r.html_url,
       description: r.description
     }));
 
-    // Update user with GitHub data
+    // Update user with GitHub data AND add verified skills to offered skills
     const updatedUser = await User.findByIdAndUpdate(
       userId,
       {
@@ -201,26 +271,29 @@ const connectGitHub = async (req, res) => {
         verifiedSkills: verifiedSkills,
         verificationScore: verificationScore,
         verificationBadge: badge,
+        skillsOffered: updatedSkillsOffered,
         githubStats: {
           publicRepos: profile.public_repos || 0,
           followers: profile.followers || 0,
           following: profile.following || 0,
           repos: topRepos
         },
-        // Update reputation based on GitHub
-        $inc: { reputation: Math.min(verifiedSkills.length * 5, 50) }
+        $inc: { reputation: Math.min(verifiedSkills.length * 8, 60) }
       },
-      { new: true, runValidators: true }
+      { new: true }
     ).select('-password');
 
-    console.log(`GitHub connected successfully for user ${updatedUser.name}. Score: ${verificationScore}`);
+    console.log(`GitHub connection complete. Added ${newSkillsAdded.length} new verified skills. Total skills offered: ${updatedSkillsOffered.length}`);
+    console.log(`Skills offered now: ${updatedSkillsOffered.map(s => s.name).join(', ')}`);
 
     res.status(200).json({
       success: true,
-      message: 'GitHub connected successfully',
+      message: `GitHub connected successfully! Added ${newSkillsAdded.length} verified skills to your profile.`,
       user: updatedUser,
       stats: {
         verifiedSkills,
+        newSkillsAdded: newSkillsAdded,
+        updatedExistingSkills: updatedExistingSkills,
         verificationScore,
         badge,
         totalRepos: profile.public_repos,
@@ -238,11 +311,30 @@ const connectGitHub = async (req, res) => {
   }
 };
 
-// Disconnect GitHub
+// Disconnect GitHub - Remove verified skills from offered skills
 const disconnectGitHub = async (req, res) => {
   try {
     const userId = req.user._id;
-
+    const currentUser = await User.findById(userId);
+    
+    if (!currentUser) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+    
+    // Count skills before removal
+    const beforeCount = (currentUser.skillsOffered || []).length;
+    
+    // Remove github-verified skills from offered skills
+    const updatedSkillsOffered = (currentUser.skillsOffered || []).filter(skill => {
+      // Keep skills that are NOT verified via GitHub
+      return !(skill.verified === true && skill.verifiedVia === 'github');
+    });
+    
+    const removedCount = beforeCount - updatedSkillsOffered.length;
+    
     const updatedUser = await User.findByIdAndUpdate(
       userId,
       {
@@ -252,14 +344,17 @@ const disconnectGitHub = async (req, res) => {
         verifiedSkills: [],
         verificationScore: 0,
         verificationBadge: null,
-        githubStats: null
+        githubStats: null,
+        skillsOffered: updatedSkillsOffered
       },
       { new: true }
     ).select('-password');
 
+    console.log(`GitHub disconnected. Removed ${removedCount} verified skills. Remaining skills: ${updatedSkillsOffered.length}`);
+
     res.status(200).json({
       success: true,
-      message: 'GitHub disconnected successfully',
+      message: `GitHub disconnected. Removed ${removedCount} verified skills from your profile.`,
       user: updatedUser
     });
 
@@ -277,11 +372,14 @@ const getGitHubStatus = async (req, res) => {
   try {
     const { userId } = req.params;
     
-    const user = await User.findById(userId).select('githubConnected githubUsername githubStats verifiedSkills verificationScore verificationBadge');
+    const user = await User.findById(userId).select('githubConnected githubUsername githubStats verifiedSkills verificationScore verificationBadge skillsOffered');
     
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
+
+    // Get only verified skills from offered skills
+    const verifiedOfferedSkills = (user.skillsOffered || []).filter(skill => skill.verified === true);
 
     res.status(200).json({
       success: true,
@@ -290,6 +388,8 @@ const getGitHubStatus = async (req, res) => {
       verifiedSkills: user.verifiedSkills || [],
       verificationScore: user.verificationScore || 0,
       verificationBadge: user.verificationBadge || '⚪ Novice',
+      verifiedOfferedSkills: verifiedOfferedSkills,
+      allOfferedSkills: user.skillsOffered || [],
       stats: user.githubStats || null
     });
 

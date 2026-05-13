@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-import { Edit, X, MapPin, Clock, Star, User, LogOut, Camera, CheckCircle, Github, ExternalLink } from 'lucide-react';
+import { Edit, X, MapPin, Clock, Star, User, LogOut, Camera, Github, CheckCircle, Award, ExternalLink, Loader2 } from 'lucide-react';
 import LoadingSpinner from '../components/LoadingSpinner';
 import api from '../config/api';
 import { useNavigate } from 'react-router-dom';
@@ -32,9 +32,14 @@ const Profile = () => {
       if (response.data.success) {
         updateUser(response.data.user);
         setGitHubStats(response.data.stats);
-        toast.success(`GitHub Connected! ${response.data.stats?.verifiedSkills?.length || 0} skills verified.`);
+        toast.success(response.data.message || `GitHub Connected! ${response.data.stats?.verifiedSkills?.length || 0} skills verified.`);
         setShowGitHubModal(false);
         setGithubUsername('');
+        // Refresh the page to show updated skills
+        window.dispatchEvent(new Event('refresh-users'));
+        // Also refresh user data
+        const meResponse = await api.get('/auth/me');
+        updateUser(meResponse.data.user);
       } else {
         toast.error(response.data.message || "Connection failed");
       }
@@ -48,7 +53,7 @@ const Profile = () => {
 
   // Disconnect GitHub
   const disconnectGitHub = async () => {
-    if (!window.confirm('Are you sure you want to disconnect GitHub? This will remove all verified skills and your verification score will reset to 0.')) {
+    if (!window.confirm('Are you sure you want to disconnect GitHub? This will remove all verified skills from your profile.')) {
       return;
     }
     
@@ -58,7 +63,11 @@ const Profile = () => {
       if (response.data.success) {
         updateUser(response.data.user);
         setGitHubStats(null);
-        toast.success('GitHub disconnected successfully');
+        toast.success(response.data.message || 'GitHub disconnected successfully');
+        window.dispatchEvent(new Event('refresh-users'));
+        // Refresh user data
+        const meResponse = await api.get('/auth/me');
+        updateUser(meResponse.data.user);
       }
     } catch (error) {
       console.error('GitHub disconnect error:', error);
@@ -68,21 +77,20 @@ const Profile = () => {
     }
   };
 
-  // Get badge based on verification score
-  const getBadge = (score = 0, badge = null) => {
+  // Get verification badge
+  const getVerificationBadge = (score, badge) => {
     if (badge) return badge;
-    if (score >= 80) return "🥇 Gold Verified";
-    if (score >= 50) return "🥈 Silver Verified";
-    if (score >= 25) return "🥉 Bronze Verified";
-    return "⚪ Novice";
+    if (score >= 80) return '🏆 Gold Verified';
+    if (score >= 50) return '🥈 Silver Verified';
+    if (score >= 25) return '🥉 Bronze Verified';
+    return '⚪ Novice';
   };
 
-  // Get badge color
-  const getBadgeColor = (score = 0) => {
-    if (score >= 80) return "bg-yellow-500/20 text-yellow-400 border-yellow-500/30";
-    if (score >= 50) return "bg-gray-500/20 text-gray-300 border-gray-500/30";
-    if (score >= 25) return "bg-orange-500/20 text-orange-400 border-orange-500/30";
-    return "bg-blue-500/20 text-blue-400 border-blue-500/30";
+  const getBadgeColor = (score) => {
+    if (score >= 80) return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
+    if (score >= 50) return 'bg-gray-500/20 text-gray-300 border-gray-500/30';
+    if (score >= 25) return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
+    return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
   };
 
   const [loading, setLoading] = useState(false);
@@ -110,6 +118,10 @@ const Profile = () => {
 
   useEffect(() => {
     if (user) {
+      console.log('User data loaded:', user);
+      console.log('Skills Offered:', user.skillsOffered);
+      console.log('Verified Skills:', user.verifiedSkills);
+      
       setProfileData({
         name: user.name || '',
         location: user.location || '',
@@ -279,6 +291,9 @@ const Profile = () => {
     return <LoadingSpinner size="lg" className="py-20" />;
   }
 
+  const verifiedSkillsCount = (user.skillsOffered || []).filter(s => s.verified === true).length;
+  const githubVerifiedSkills = (user.skillsOffered || []).filter(s => s.verified === true && s.verifiedVia === 'github');
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-start bg-white pt-2 pb-10 px-2">
       {/* Header with greeting and illustration */}
@@ -292,6 +307,9 @@ const Profile = () => {
         <div className="rounded-2xl shadow bg-[#5D3C64] text-white p-6 flex flex-col items-center">
           <span className="text-2xl font-bold">{user.skillsOffered?.length || 0}</span>
           <span className="mt-2 text-sm font-medium">Skills Offered</span>
+          {verifiedSkillsCount > 0 && (
+            <span className="text-xs mt-1 text-green-300">({verifiedSkillsCount} verified)</span>
+          )}
         </div>
         <div className="rounded-2xl shadow bg-[#7B466A] text-white p-6 flex flex-col items-center">
           <span className="text-2xl font-bold">{user.skillsWanted?.length || 0}</span>
@@ -335,6 +353,11 @@ const Profile = () => {
                     setImageError(true);
                   }}
                 />
+                {user.githubConnected && (
+                  <div className="absolute -bottom-1 -right-1 bg-gray-800 rounded-full p-1.5 border-2 border-white">
+                    <Github className="w-4 h-4 text-white" />
+                  </div>
+                )}
                 {editing && (
                   <div className="absolute -top-2 -right-2 flex gap-1">
                     <label className="bg-[#D391B0] rounded-full p-2 cursor-pointer shadow-lg hover:bg-[#BA6E8F] transition-colors flex items-center justify-center">
@@ -353,8 +376,15 @@ const Profile = () => {
                 )}
               </div>
             ) : (
-              <div className="w-32 h-32 bg-[#7B466A] rounded-full flex items-center justify-center relative">
-                <span className="text-white font-bold text-5xl">{user.name.charAt(0).toUpperCase()}</span>
+              <div className="relative">
+                <div className="w-32 h-32 bg-gradient-to-br from-[#7B466A] to-[#5D3C64] rounded-full flex items-center justify-center relative">
+                  <span className="text-white font-bold text-5xl">{user.name.charAt(0).toUpperCase()}</span>
+                  {user.githubConnected && (
+                    <div className="absolute -bottom-1 -right-1 bg-gray-800 rounded-full p-1.5 border-2 border-white">
+                      <Github className="w-4 h-4 text-white" />
+                    </div>
+                  )}
+                </div>
                 {editing && (
                   <div className="absolute -top-2 -right-2">
                     <label className="bg-[#D391B0] rounded-full p-2 cursor-pointer shadow-lg hover:bg-[#BA6E8F] transition-colors flex items-center justify-center">
@@ -491,9 +521,20 @@ const Profile = () => {
               </form>
             ) : (
               <>
-                <h2 className="text-2xl font-bold text-[#0C0420] mb-1">{user.name}</h2>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="text-2xl font-bold text-[#0C0420]">{user.name}</h2>
+                  {user.verificationScore > 0 && (
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold border ${getBadgeColor(user.verificationScore)}`}>
+                      <Award className="w-3 h-3" />
+                      {getVerificationBadge(user.verificationScore, user.verificationBadge)}
+                    </span>
+                  )}
+                </div>
                 {user.location && (
-                  <div className="text-[#5D3C64] mb-2">{user.location}</div>
+                  <div className="text-[#5D3C64] mb-2 flex items-center gap-1">
+                    <MapPin className="w-4 h-4" />
+                    {user.location}
+                  </div>
                 )}
                 <div className="flex items-center gap-2 mb-2">
                   {renderStars(user.ratingAverage || 5.0)}
@@ -569,12 +610,34 @@ const Profile = () => {
             <div className="space-y-2">
               {user.skillsOffered && user.skillsOffered.length > 0 ? (
                 user.skillsOffered.map((skill, idx) => (
-                  <div key={skill._id || idx} className="flex items-center gap-3 bg-[#D391B0]/30 rounded-lg px-3 py-2 shadow border border-[#7B466A]">
+                  <div key={skill._id || idx} className={`flex items-center gap-3 rounded-lg px-3 py-2 shadow border ${
+                    skill.verified 
+                      ? 'bg-green-50 border-green-400' 
+                      : 'bg-[#D391B0]/30 border-[#7B466A]'
+                  }`}>
                     <div className="flex-1">
-                      <div className="font-semibold text-[#0C0420]">{skill.name}</div>
-                      <div className="text-xs text-[#5D3C64]">{skill.description}</div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <div className={`font-semibold ${skill.verified ? 'text-green-700' : 'text-[#0C0420]'}`}>
+                          {skill.name}
+                        </div>
+                        {skill.verified && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-400">
+                            <CheckCircle className="w-3 h-3" />
+                            Verified via {skill.verifiedVia === 'github' ? 'GitHub' : skill.verifiedVia || 'GitHub'}
+                          </span>
+                        )}
+                      </div>
+                      {skill.description && (
+                        <div className="text-xs text-[#5D3C64] mt-1">{skill.description}</div>
+                      )}
                     </div>
-                    <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-[#7B466A] text-white border border-[#5D3C64]">{skill.proficiency}</span>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${
+                      skill.verified 
+                        ? 'bg-green-600 text-white border-green-700' 
+                        : 'bg-[#7B466A] text-white border-[#5D3C64]'
+                    }`}>
+                      {skill.proficiency}
+                    </span>
                     <button
                       className="ml-2 text-xs text-[#BA6E8F] hover:text-[#0C0420] font-bold"
                       onClick={() => handleRemoveSkillOffered(skill._id)}
@@ -588,6 +651,7 @@ const Profile = () => {
               )}
             </div>
           </div>
+          
           {/* Skills Wanted */}
           <div>
             <div className="flex items-center justify-between mb-2">
@@ -663,7 +727,7 @@ const Profile = () => {
           </div>
         </div>
         
-        {/* GitHub Skill Verification Section - UPDATED */}
+        {/* GitHub Skill Verification Section */}
         <div className="bg-gradient-to-r from-[#0C0420] to-[#2C1A3A] rounded-2xl p-6 mt-6 text-white">
           <div className="flex justify-between items-center mb-4 flex-wrap gap-4">
             <h3 className="text-2xl font-bold flex items-center gap-2">
@@ -674,15 +738,17 @@ const Profile = () => {
               <button
                 onClick={disconnectGitHub}
                 disabled={gitDisconnecting}
-                className="bg-red-500/20 hover:bg-red-500/30 text-red-300 px-4 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
+                className="bg-red-500/20 hover:bg-red-500/30 text-red-300 px-4 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 flex items-center gap-2"
               >
+                {gitDisconnecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
                 {gitDisconnecting ? 'Disconnecting...' : 'Disconnect GitHub'}
               </button>
             ) : (
               <button
                 onClick={() => setShowGitHubModal(true)}
-                className="bg-[#D391B0] text-[#0C0420] px-4 py-2 rounded-lg text-sm font-bold hover:bg-[#BA6E8F] transition-colors"
+                className="bg-[#D391B0] text-[#0C0420] px-4 py-2 rounded-lg text-sm font-bold hover:bg-[#BA6E8F] transition-colors flex items-center gap-2"
               >
+                <Github className="w-4 h-4" />
                 Connect GitHub
               </button>
             )}
@@ -719,7 +785,7 @@ const Profile = () => {
 
               <div className="mb-4">
                 <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
-                  <h4 className="font-bold text-lg">Verified Skills</h4>
+                  <h4 className="font-bold text-lg">Verified Skills from GitHub</h4>
                   <div className="text-right">
                     <span className="text-2xl font-bold text-[#D391B0]">{user.verificationScore || 0}</span>
                     <span className="text-sm text-gray-300">/100</span>
@@ -734,9 +800,10 @@ const Profile = () => {
                 <div className="flex justify-between items-center mb-3">
                   <span className="text-sm text-gray-300">Verification Score</span>
                   <span className={`px-2 py-1 rounded-full text-xs font-semibold border ${getBadgeColor(user.verificationScore || 0)}`}>
-                    {getBadge(user.verificationScore || 0, user.verificationBadge)}
+                    {getVerificationBadge(user.verificationScore || 0, user.verificationBadge)}
                   </span>
                 </div>
+                
                 <div className="flex flex-wrap gap-2 mt-3">
                   {user?.verifiedSkills?.length > 0 ? (
                     user.verifiedSkills.map((skill, index) => (
@@ -766,13 +833,20 @@ const Profile = () => {
                   </div>
                 </details>
               )}
+
+              <div className="mt-4 p-3 bg-green-500/10 rounded-lg border border-green-500/20">
+                <p className="text-sm text-green-300 flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4" />
+                  {githubVerifiedSkills.length} verified skills have been automatically added to your "Skills Offered" section above with verification badges.
+                </p>
+              </div>
             </>
           ) : (
             <div className="text-center py-6 text-gray-400">
               <Github className="w-12 h-12 mx-auto mb-3 opacity-50" />
               <p>Connect your GitHub account to automatically verify your skills</p>
               <p className="text-sm mt-2">We'll analyze your repositories to detect programming languages and frameworks</p>
-              <p className="text-xs mt-4 text-gray-500">Your verification score helps build trust in the community</p>
+              <p className="text-xs mt-4 text-gray-500">Verified skills will be automatically added to your profile with a ✓ badge</p>
             </div>
           )}
         </div>
@@ -905,56 +979,60 @@ const Profile = () => {
 
       {/* GitHub Connection Modal */}
       {showGitHubModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-bold text-[#0C0420]">Connect GitHub</h2>
-              <button
-                onClick={() => setShowGitHubModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="w-6 h-6" />
-              </button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md animate-fade-in">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-2xl font-bold text-[#0C0420]">Connect GitHub</h2>
+                <button
+                  onClick={() => setShowGitHubModal(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+              <p className="text-gray-600 mb-4">Enter your GitHub username to verify your skills</p>
+              <div className="relative">
+                <Github className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="e.g., octocat"
+                  value={githubUsername}
+                  onChange={(e) => setGithubUsername(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 rounded-lg border border-gray-300 focus:border-[#7B466A] focus:ring-2 focus:ring-[#7B466A]/20 outline-none"
+                  onKeyPress={(e) => e.key === 'Enter' && connectGitHub()}
+                />
+              </div>
+              <div className="mt-6 flex gap-4">
+                <button
+                  onClick={connectGitHub}
+                  disabled={gitLoading}
+                  className="flex-1 bg-[#7B466A] text-white font-bold px-6 py-2.5 rounded-lg hover:bg-[#5D3C64] transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {gitLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Connecting...
+                    </>
+                  ) : (
+                    <>
+                      <Github className="w-4 h-4" />
+                      Connect
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => setShowGitHubModal(false)}
+                  className="flex-1 border border-gray-300 text-gray-700 font-bold px-6 py-2.5 rounded-lg hover:bg-gray-100 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+              <p className="text-xs text-gray-400 mt-4 text-center">
+                We'll analyze your public repositories to detect programming languages and frameworks.
+                Verified skills will be automatically added to your profile.
+              </p>
             </div>
-            <p className="text-gray-600 mb-4">Enter your GitHub username to verify your skills</p>
-            <div className="relative">
-              <Github className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
-                type="text"
-                placeholder="e.g., octocat"
-                value={githubUsername}
-                onChange={(e) => setGithubUsername(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 rounded-lg border border-gray-300 focus:border-[#7B466A] focus:ring-2 focus:ring-[#7B466A]/20 outline-none"
-              />
-            </div>
-            <div className="mt-6 flex gap-4">
-              <button
-                onClick={connectGitHub}
-                disabled={gitLoading}
-                className="flex-1 bg-[#7B466A] text-white font-bold px-6 py-2 rounded-lg hover:bg-[#5D3C64] transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {gitLoading ? (
-                  <>
-                    <LoadingSpinner size="sm" />
-                    Connecting...
-                  </>
-                ) : (
-                  <>
-                    <Github className="w-4 h-4" />
-                    Connect
-                  </>
-                )}
-              </button>
-              <button
-                onClick={() => setShowGitHubModal(false)}
-                className="flex-1 border border-gray-300 text-gray-700 font-bold px-6 py-2 rounded-lg hover:bg-gray-100 transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-            <p className="text-xs text-gray-400 mt-4 text-center">
-              We'll analyze your public repositories to detect programming languages and frameworks
-            </p>
           </div>
         </div>
       )}

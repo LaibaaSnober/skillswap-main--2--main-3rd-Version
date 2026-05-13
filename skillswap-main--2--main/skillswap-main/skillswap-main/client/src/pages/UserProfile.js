@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import API from "../config/api";
-
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { 
@@ -13,7 +12,10 @@ import {
   ArrowLeft,
   X,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Github,
+  CheckCircle,
+  Award
 } from 'lucide-react';
 import LoadingSpinner from '../components/LoadingSpinner';
 
@@ -38,35 +40,6 @@ const UserProfile = () => {
     message: '',
     scheduledDate: ''
   });
-  const connectGitHub = async () => {
-  try {
-    await API.put("/users/profile", {
-      githubConnected: true,
-    });
-
-    await API.post("/users/github/detect-skills");
-
-    alert("✅ GitHub Connected + Skills Detected");
-  } catch (error) {
-    console.log(error);
-    alert("❌ GitHub connection failed");
-  }
-};
-
-  const handleRemoveImage = async () => {
-    try {
-      await axios.delete('http://localhost:5000/api/users/profile-photo');
-      
-      setUser(prev => ({
-        ...prev,
-        profilePhoto: null
-      }));
-      
-      toast.success("Profile photo removed");
-    } catch (err) {
-      toast.error("Failed to remove image");
-    }
-  };
 
   const fetchUser = useCallback(async () => {
     try {
@@ -143,27 +116,46 @@ const UserProfile = () => {
   }, [fetchUser]);
 
   const handleSwapRequest = async () => {
-  try {
-    await API.post("/swaps", {
-      recipientId: user._id,
-      ...swapData,
-    });
+    if (!swapData.requestedSkill.name || !swapData.offeredSkill.name) {
+      toast.error('Please enter both skills');
+      return;
+    }
+    
+    try {
+      await API.post("/swaps", {
+        recipientId: user._id,
+        ...swapData,
+      });
+      
+      toast.success("Swap Request Sent Successfully!");
+      setShowSwapModal(false);
+      setSwapData({
+        requestedSkill: { name: "", description: "" },
+        offeredSkill: { name: "", description: "" },
+        message: "",
+        scheduledDate: "",
+      });
+    } catch (error) {
+      console.log(error);
+      toast.error(error.response?.data?.message || "Swap request failed");
+    }
+  };
 
-    alert("✅ Swap Request Sent!");
-    setShowSwapModal(false);
+  // Get verification badge
+  const getVerificationBadge = (score, badge) => {
+    if (badge) return badge;
+    if (score >= 80) return '🏆 Gold Verified';
+    if (score >= 50) return '🥈 Silver Verified';
+    if (score >= 25) return '🥉 Bronze Verified';
+    return null;
+  };
 
-    setSwapData({
-      requestedSkill: { name: "", description: "" },
-      offeredSkill: { name: "", description: "" },
-      message: "",
-      scheduledDate: "",
-    });
-
-  } catch (error) {
-    console.log(error);
-    alert("❌ Swap Failed");
-  }
-};
+  const getBadgeColorClass = (score) => {
+    if (score >= 80) return 'bg-yellow-100 text-yellow-800 border-yellow-300';
+    if (score >= 50) return 'bg-gray-100 text-gray-800 border-gray-300';
+    if (score >= 25) return 'bg-orange-100 text-orange-800 border-orange-300';
+    return '';
+  };
 
   const renderStars = (rating) => {
     const stars = [];
@@ -187,6 +179,7 @@ const UserProfile = () => {
   };
 
   const getAvailabilityText = (availability) => {
+    if (!availability) return 'Not specified';
     const options = [];
     
     if (availability.weekdays) options.push('Weekdays');
@@ -209,83 +202,74 @@ const UserProfile = () => {
     );
   }
 
+  const isOwner = currentUser?._id === user._id;
+  const verificationBadge = getVerificationBadge(user.verificationScore || 0, user.verificationBadge);
+  const githubVerifiedSkillsCount = (user.skillsOffered || []).filter(s => s.verified === true && s.verifiedVia === 'github').length;
+
   return (
     <div className="min-h-screen flex flex-col items-center bg-white pt-8 px-2 animate-fade-in">
       {/* Header */}
       <div className="mb-8 w-full max-w-4xl">
         <button
           onClick={() => navigate('/browse')}
-          className="flex items-center text-brand-mauve hover:text-brand-plum mb-4"
+          className="flex items-center text-brand-mauve hover:text-brand-plum mb-4 transition-colors"
         >
           <ArrowLeft className="w-4 h-4 mr-2" />
           Back to Browse
         </button>
-        {/* DEBUG INFO - TEMPORARY */}
-        <div className="bg-yellow-100 p-2 mb-4 rounded text-xs">
-          <p><strong>Debug Info:</strong></p>
-          <p>Current User ID: {currentUser?._id || 'Not logged in'}</p>
-          <p>Profile User ID: {user?._id}</p>
-          <p>Is Owner: {currentUser?._id === user?._id ? 'YES ✅' : 'NO ❌'}</p>
-          <p>Has Profile Photo: {user?.profilePhoto ? 'YES' : 'NO'}</p>
-        </div>
-        <div className="flex items-start justify-between">
+        
+        <div className="flex items-start justify-between flex-wrap gap-4">
           <div className="flex items-center space-x-6">
-            {/* PROFILE IMAGE SECTION */}
-            {/* PROFILE IMAGE SECTION */}
-        <div className="flex flex-col items-center">
-          {user?.profilePhoto ? (
-            <div className="relative">
-              <img
-                src={`http://localhost:5000${user.profilePhoto}`}
-                alt={user.name}
-                className="w-24 h-24 rounded-full object-cover border-2 border-brand-mauve"
-              />
-              
-              {/* REMOVE BUTTON - SIMPLE VERSION */}
-              {currentUser?._id === user?._id && (
-                <button
-                  onClick={async () => {
-                    console.log("Remove button clicked");
-                    const token = localStorage.getItem('token');
-                    try {
-                      const response = await axios.delete('http://localhost:5000/api/users/profile-photo', {
-                        headers: {
-                          'Authorization': `Bearer ${token}`
-                        }
-                      });
-                      console.log("Response:", response);
-                      setUser(prev => ({ ...prev, profilePhoto: null }));
-                      toast.success("Profile photo removed!");
-                      window.location.reload(); // Refresh to see changes
-                    } catch (error) {
-                      console.error("Error:", error);
-                      toast.error(error.response?.data?.message || "Failed to remove");
-                    }
-                  }}
-                  className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600"
-                >
-                  ✕
-                </button>
+            {/* Profile Image */}
+            <div className="flex flex-col items-center">
+              {user?.profilePhoto ? (
+                <div className="relative">
+                  <img
+                    src={user.profilePhoto.startsWith('http') ? user.profilePhoto : `http://localhost:5000${user.profilePhoto}`}
+                    alt={user.name}
+                    className="w-24 h-24 rounded-full object-cover border-4 border-brand-mauve shadow-lg"
+                    onError={(e) => {
+                      e.target.onerror = null;
+                      e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=7B466A&color=fff&size=96`;
+                    }}
+                  />
+                  {user.githubConnected && (
+                    <div className="absolute -bottom-1 -right-1 bg-gray-800 rounded-full p-1 border-2 border-white">
+                      <Github className="w-4 h-4 text-white" />
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="relative">
+                  <div className="w-24 h-24 bg-gradient-to-br from-[#7B466A] to-[#5D3C64] rounded-full flex items-center justify-center text-white text-3xl font-bold shadow-lg border-4 border-brand-mauve">
+                    {user.name?.charAt(0).toUpperCase()}
+                  </div>
+                  {user.githubConnected && (
+                    <div className="absolute -bottom-1 -right-1 bg-gray-800 rounded-full p-1 border-2 border-white">
+                      <Github className="w-4 h-4 text-white" />
+                    </div>
+                  )}
+                </div>
               )}
             </div>
-          ) : (
-            <div className="w-24 h-24 bg-gray-200 rounded-full flex items-center justify-center">
-              <span className="text-gray-500 font-semibold text-3xl">
-                {user.name?.charAt(0).toUpperCase()}
-              </span>
-            </div>
-          )}
-        </div>
-            {/* USER INFO */}
+            
+            {/* User Info */}
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">{user.name}</h1>
-               <p className={`text-sm mt-1 font-medium ${
-                  user.githubConnected ? "text-green-600" : "text-red-500"
-                }`}>
-                  {user.githubConnected
-                    ? "🐙 GitHub Connected"
-                    : "❌ Not Connected"}
-                </p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-3xl font-bold text-gray-900">{user.name}</h1>
+                {verificationBadge && (
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${getBadgeColorClass(user.verificationScore)}`}>
+                    <Award className="w-3 h-3" />
+                    {verificationBadge}
+                  </span>
+                )}
+                {user.githubConnected && !verificationBadge && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-700 border border-gray-300">
+                    <Github className="w-3 h-3" />
+                    GitHub Connected
+                  </span>
+                )}
+              </div>
 
               {user.location && (
                 <p className="text-gray-600 flex items-center mt-1">
@@ -295,83 +279,79 @@ const UserProfile = () => {
               )}
             </div>
           </div>
-          <button
-                  onClick={connectGitHub}
-                  style={{
-                    background: "black",
-                    color: "white",
-                    padding: "10px 12px",
-                    borderRadius: "8px",
-                    marginTop: "10px",
-                    cursor: "pointer"
-                  }}
-                >
-                  🐙 Connect GitHub
-                </button>
-                          
-          <div className="flex flex-col items-end">
+          
+          {/* Rating and Swap Button - Only show swap button if not owner */}
+          <div className="flex flex-col items-end gap-3">
             {typeof user.ratingAverage === 'number' && user.ratingCount > 0 ? (
-              <div className="flex flex-col mt-2">
-                <div className="flex items-center">
+              <div className="flex flex-col items-end">
+                <div className="flex items-center gap-1">
                   {renderStars(user.ratingAverage)}
-                  <span className="ml-2 font-bold text-[#7B466A]">{user.ratingAverage.toFixed(1)}/5</span>
-                  <span className="ml-1 text-xs text-gray-500">({user.ratingCount})</span>
+                  <span className="ml-2 font-bold text-[#7B466A]">{user.ratingAverage.toFixed(1)}</span>
+                  <span className="text-xs text-gray-400">({user.ratingCount})</span>
                 </div>
-                {/* Recent reviews list */}
-                {user.recentReviews && user.recentReviews.length > 0 && (
-                  <div className="mt-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-md font-semibold text-gray-800">Recent Reviews</h3>
-                      {user.ratingCount > 3 && (
-                        <button
-                          onClick={openAllReviewsModal}
-                          className="text-sm text-brand-plum hover:text-brand-mauve font-semibold"
-                        >
-                          View All ({user.ratingCount})
-                        </button>
-                      )}
-                    </div>
-                    {user.recentReviews.map((review, i) => (
-                      <div key={i} className="mb-3 p-3 bg-gray-50 rounded shadow-sm border border-gray-100">
-                        <div className="flex items-center gap-2 mb-1">
-                          {review.reviewer && review.reviewer.profilePhoto ? (
-                            <img src={review.reviewer.profilePhoto} alt={review.reviewer.name} className="w-7 h-7 rounded-full object-cover" />
-                          ) : (
-                            <span className="w-7 h-7 rounded-full bg-gray-300 flex items-center justify-center text-xs font-bold text-gray-700">
-                              {review.reviewer && review.reviewer.name ? review.reviewer.name.charAt(0).toUpperCase() : '?'}
-                            </span>
-                          )}
-                          <span className="font-semibold text-xs text-brand-plum">{review.reviewer && review.reviewer.name}</span>
-                          <span className="text-xs text-yellow-600 font-bold">{'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)}</span>
-                          <span className="text-xs text-gray-400 ml-2">{new Date(review.date).toLocaleDateString()}</span>
-                        </div>
-                        {review.comment && <div className="text-xs text-gray-700 italic">"{review.comment}"</div>}
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
             ) : (
-              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-gray-100 text-gray-500 font-semibold text-sm shadow mt-2">
-                <svg className="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.286 3.967a1 1 0 00.95.69h4.175c.969 0 1.371 1.24.588 1.81l-3.38 2.455a1 1 0 00-.364 1.118l1.287 3.966c.3.922-.755 1.688-1.54 1.118l-3.38-2.454a1 1 0 00-1.175 0l-3.38 2.454c-.784.57-1.838-.196-1.54-1.118l1.287-3.966a1 1 0 00-.364-1.118L2.05 9.394c-.783-.57-.38-1.81.588-1.81h4.175a1 1 0 00.95-.69l1.286-3.967z"/>
-                </svg>
-                Not yet rated
-              </span>
+              <span className="text-xs text-gray-400">No ratings yet</span>
             )}
             
-            {currentUser && currentUser._id !== user._id && (
+            {currentUser && !isOwner && (
               <button
                 onClick={() => setShowSwapModal(true)}
-                className="btn btn-primary mt-4"
+                className="btn btn-primary mt-2 flex items-center gap-2"
               >
-                <Send className="w-4 h-4 mr-2" />
+                <Send className="w-4 h-4" />
                 Request Swap
               </button>
             )}
           </div>
         </div>
       </div>
+
+      {/* GitHub Stats Section - Only show if user has GitHub connected */}
+      {user.githubConnected && user.githubStats && (
+        <div className="card mb-8 w-full max-w-4xl bg-gradient-to-r from-gray-50 to-gray-100">
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div className="flex items-center gap-3">
+              <Github className="w-8 h-8 text-gray-700" />
+              <div>
+                <h3 className="font-semibold text-gray-800">GitHub Verified</h3>
+                <a 
+                  href={user.githubProfile} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-sm text-brand-plum hover:underline"
+                >
+                  @{user.githubUsername}
+                </a>
+              </div>
+            </div>
+            <div className="flex gap-6">
+              <div className="text-center">
+                <p className="text-xl font-bold text-gray-800">{user.githubStats.publicRepos || 0}</p>
+                <p className="text-xs text-gray-500">Repos</p>
+              </div>
+              <div className="text-center">
+                <p className="text-xl font-bold text-gray-800">{user.githubStats.followers || 0}</p>
+                <p className="text-xs text-gray-500">Followers</p>
+              </div>
+              <div className="text-center">
+                <p className="text-xl font-bold text-brand-plum">{user.verificationScore || 0}</p>
+                <p className="text-xs text-gray-500">Score</p>
+              </div>
+            </div>
+          </div>
+          {user.verificationScore > 0 && (
+            <div className="mt-3">
+              <div className="w-full bg-gray-200 rounded-full h-1.5">
+                <div 
+                  className="bg-brand-plum h-1.5 rounded-full transition-all duration-500"
+                  style={{ width: `${Math.min(user.verificationScore, 100)}%` }}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Bio */}
       {user.bio && (
@@ -386,24 +366,52 @@ const UserProfile = () => {
         <h2 className="text-xl font-semibold text-gray-900 mb-3">Availability</h2>
         <div className="flex items-center text-gray-600">
           <Clock className="w-4 h-4 mr-2" />
-          <span>{getAvailabilityText(user.availability || {})}</span>
+          <span>{getAvailabilityText(user.availability)}</span>
         </div>
       </div>
 
       {/* Skills Offered */}
       <div className="card mb-8 w-full max-w-4xl">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Skills Offered</h2>
+        <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          Skills Offered
+          {githubVerifiedSkillsCount > 0 && (
+            <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full flex items-center gap-1">
+              <CheckCircle className="w-3 h-3" />
+              {githubVerifiedSkillsCount} GitHub Verified
+            </span>
+          )}
+        </h2>
         {user.skillsOffered?.length === 0 ? (
           <p className="text-gray-500">No skills offered yet</p>
         ) : (
           <div className="grid md:grid-cols-2 gap-4">
             {user.skillsOffered?.map((skill, index) => (
-              <div key={skill._id || index} className="p-4 bg-green-50 rounded-lg">
-                <h3 className="font-semibold text-green-800">{skill.name}</h3>
+              <div key={skill._id || index} className={`p-4 rounded-lg border ${
+                skill.verified 
+                  ? 'bg-green-50 border-green-300' 
+                  : 'bg-gray-50 border-gray-200'
+              }`}>
+                <div className="flex items-center justify-between mb-1">
+                  <h3 className={`font-semibold ${skill.verified ? 'text-green-800' : 'text-gray-800'}`}>
+                    {skill.name}
+                  </h3>
+                  {skill.verified && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-400">
+                      <CheckCircle className="w-3 h-3" />
+                      Verified
+                    </span>
+                  )}
+                </div>
                 {skill.description && (
-                  <p className="text-sm text-green-600 mt-1">{skill.description}</p>
+                  <p className="text-sm text-gray-600 mt-1">{skill.description}</p>
                 )}
-                <span className="badge badge-primary text-xs mt-2">{skill.proficiency}</span>
+                <span className={`inline-block mt-2 px-2 py-0.5 rounded-full text-xs font-semibold ${
+                  skill.verified 
+                    ? 'bg-green-200 text-green-800' 
+                    : 'bg-gray-200 text-gray-700'
+                }`}>
+                  {skill.proficiency}
+                </span>
               </div>
             ))}
           </div>
@@ -418,12 +426,14 @@ const UserProfile = () => {
         ) : (
           <div className="grid md:grid-cols-2 gap-4">
             {user.skillsWanted?.map((skill, index) => (
-              <div key={skill._id || index} className="p-4 bg-blue-50 rounded-lg">
+              <div key={skill._id || index} className="p-4 bg-blue-50 rounded-lg border border-blue-200">
                 <h3 className="font-semibold text-blue-800">{skill.name}</h3>
                 {skill.description && (
                   <p className="text-sm text-blue-600 mt-1">{skill.description}</p>
                 )}
-                <span className="badge badge-secondary text-xs mt-2">{skill.priority} Priority</span>
+                <span className="inline-block mt-2 px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-200 text-blue-800">
+                  {skill.priority} Priority
+                </span>
               </div>
             ))}
           </div>
@@ -432,9 +442,14 @@ const UserProfile = () => {
 
       {/* Swap Request Modal */}
       {showSwapModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-lg font-semibold mb-4">Request Skill Swap</h3>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">Request Skill Swap with {user.name}</h3>
+              <button onClick={() => setShowSwapModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
             
             <div className="space-y-4">
               <div>
@@ -609,9 +624,11 @@ const UserProfile = () => {
                             </span>
                           )}
                           <div className="flex-1">
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-semibold text-brand-plum">{review.reviewer && review.reviewer.name}</span>
-                              <span className="text-yellow-600 font-bold">{'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)}</span>
+                              <div className="flex items-center gap-1">
+                                {renderStars(review.rating)}
+                              </div>
                               <span className="text-sm text-gray-400">{new Date(review.date).toLocaleDateString()}</span>
                             </div>
                           </div>
