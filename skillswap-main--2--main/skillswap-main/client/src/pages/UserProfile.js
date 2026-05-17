@@ -19,6 +19,17 @@ import {
 } from 'lucide-react';
 import LoadingSpinner from '../components/LoadingSpinner';
 
+// Helper function for proficiency bar styling
+const getProficiencyStyle = (proficiency) => {
+  const levels = {
+    'Beginner': { width: '25%', color: 'bg-blue-500', label: 'Beginner' },
+    'Intermediate': { width: '50%', color: 'bg-yellow-500', label: 'Intermediate' },
+    'Advanced': { width: '75%', color: 'bg-orange-500', label: 'Advanced' },
+    'Expert': { width: '100%', color: 'bg-green-500', label: 'Expert' }
+  };
+  return levels[proficiency] || levels['Intermediate'];
+};
+
 const UserProfile = () => {
   const { id } = useParams();
   const { user: currentUser } = useAuth();
@@ -385,35 +396,44 @@ const UserProfile = () => {
           <p className="text-gray-500">No skills offered yet</p>
         ) : (
           <div className="grid md:grid-cols-2 gap-4">
-            {user.skillsOffered?.map((skill, index) => (
-              <div key={skill._id || index} className={`p-4 rounded-lg border ${
-                skill.verified 
-                  ? 'bg-green-50 border-green-300' 
-                  : 'bg-gray-50 border-gray-200'
-              }`}>
-                <div className="flex items-center justify-between mb-1">
-                  <h3 className={`font-semibold ${skill.verified ? 'text-green-800' : 'text-gray-800'}`}>
-                    {skill.name}
-                  </h3>
-                  {skill.verified && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-400">
-                      <CheckCircle className="w-3 h-3" />
-                      Verified
-                    </span>
-                  )}
-                </div>
-                {skill.description && (
-                  <p className="text-sm text-gray-600 mt-1">{skill.description}</p>
-                )}
-                <span className={`inline-block mt-2 px-2 py-0.5 rounded-full text-xs font-semibold ${
+            {user.skillsOffered?.map((skill, index) => {
+              const profStyle = getProficiencyStyle(skill.proficiency);
+              return (
+                <div key={skill._id || index} className={`p-4 rounded-lg border ${
                   skill.verified 
-                    ? 'bg-green-200 text-green-800' 
-                    : 'bg-gray-200 text-gray-700'
+                    ? 'bg-green-50 border-green-300' 
+                    : 'bg-gray-50 border-gray-200'
                 }`}>
-                  {skill.proficiency}
-                </span>
-              </div>
-            ))}
+                  <div className="flex items-center justify-between mb-1">
+                    <h3 className={`font-semibold ${skill.verified ? 'text-green-800' : 'text-gray-800'}`}>
+                      {skill.name}
+                    </h3>
+                    {skill.verified && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-400">
+                        <CheckCircle className="w-3 h-3" />
+                        Verified
+                      </span>
+                    )}
+                  </div>
+                  {skill.description && (
+                    <p className="text-sm text-gray-600 mt-1">{skill.description}</p>
+                  )}
+                  {/* Visual proficiency bar */}
+                  <div className="mt-3">
+                    <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                      <span>Proficiency</span>
+                      <span>{profStyle.label}</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2.5">
+                      <div 
+                        className={`${profStyle.color} h-2.5 rounded-full transition-all duration-300`}
+                        style={{ width: profStyle.width }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
