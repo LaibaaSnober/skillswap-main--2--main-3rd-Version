@@ -3,6 +3,17 @@ import API from "../config/api";
 import { Link } from "react-router-dom";
 import { Github, CheckCircle, Star, MapPin, Award } from 'lucide-react';
 
+// Helper to get proficiency color for visual indicator
+const getProficiencyColor = (proficiency) => {
+  switch (proficiency?.toLowerCase()) {
+    case 'beginner': return 'bg-blue-400';
+    case 'intermediate': return 'bg-yellow-500';
+    case 'advanced': return 'bg-orange-500';
+    case 'expert': return 'bg-green-500';
+    default: return 'bg-gray-400';
+  }
+};
+
 const Users = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -194,7 +205,7 @@ const Users = () => {
                       </div>
                     </div>
 
-                    {/* Offered Skills Preview */}
+                    {/* Offered Skills Preview with Proficiency Indicators */}
                     {user.skillsOffered?.length > 0 && (
                       <div>
                         <p className="text-sm font-semibold text-[#5D3C64] mb-2 flex items-center gap-1">
@@ -203,17 +214,23 @@ const Users = () => {
                         </p>
                         <div className="flex flex-wrap gap-2">
                           {user.skillsOffered.slice(0, 3).map((skill, i) => (
-                            <span
+                            <div
                               key={i}
-                              className={`px-2 py-1 rounded-full text-xs font-semibold border flex items-center gap-1 ${
+                              className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold border ${
                                 skill.verified 
                                   ? 'bg-green-100 text-green-700 border-green-400' 
                                   : 'bg-purple-100 text-purple-700 border-purple-300'
                               }`}
                             >
+                              <span className="w-2 h-2 rounded-full mr-0.5" style={{ backgroundColor: 'currentColor' }}></span>
                               {skill.name}
-                              {skill.verified && <CheckCircle className="w-3 h-3 text-green-600" />}
-                            </span>
+                              {skill.verified && <CheckCircle className="w-3 h-3 text-green-600 ml-0.5" />}
+                              {/* Proficiency dot indicator */}
+                              <span 
+                                className={`ml-1 w-2 h-2 rounded-full ${getProficiencyColor(skill.proficiency)}`}
+                                title={skill.proficiency || 'Intermediate'}
+                              />
+                            </div>
                           ))}
                           {user.skillsOffered.length > 3 && (
                             <span className="px-2 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-600">
