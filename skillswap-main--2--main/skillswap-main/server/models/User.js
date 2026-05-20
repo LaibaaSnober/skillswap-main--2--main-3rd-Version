@@ -38,7 +38,7 @@ const userSchema = new mongoose.Schema({
     },
     proficiency: {
       type: String,
-      enum: ['Beginner', 'Intermediate', 'Advanced', 'Expert'],
+      enum: ['Beginner', 'Intermediate', 'Advanced', 'Expert', 'Verified'],
       default: 'Intermediate'
     }
   }],
