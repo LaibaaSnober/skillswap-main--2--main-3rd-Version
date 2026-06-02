@@ -53,7 +53,7 @@ const Register = () => {
   required: 'Name is required',
   minLength: {
     value: 2,
-    message: 'Name must be at least 2 characters'
+    message: 'Name must be at least 5 characters'
   },
   pattern: {
     value: /^[A-Za-z\s]+$/,
