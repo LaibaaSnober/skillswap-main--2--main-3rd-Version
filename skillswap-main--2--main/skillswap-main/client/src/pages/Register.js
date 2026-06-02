@@ -20,14 +20,36 @@ const Register = () => {
 
   const password = watch('password');
 
-  const onSubmit = async (data) => {
-    setIsLoading(true);
-    const result = await registerUser(data.name, data.email, data.password);
+const onSubmit = async (data) => {
+  setIsLoading(true);
+
+  try {
+
+    const result = await registerUser(
+      data.name,
+      data.email,
+      data.password
+    );
+
     if (result.success) {
-      navigate('/profile');
+
+      alert("Account created successfully!");
+      navigate("/login");
+
+    } else {
+
+      alert(result.message || "Registration failed");
+
     }
-    setIsLoading(false);
-  };
+
+  } catch (error) {
+
+    alert("Something went wrong. Please try again.");
+
+  }
+
+  setIsLoading(false);
+};
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-white py-6 px-2">
@@ -50,16 +72,20 @@ const Register = () => {
                     id="name"
                     type="text"
                     {...register('name', {
-  required: 'Name is required',
-  minLength: {
-    value: 2,
-    message: 'Name must be at least 5 characters'
-  },
-  pattern: {
-    value: /^[A-Za-z\s]+$/,
-    message: 'Name can contain only letters and spaces'
-  }
-})}
+                        required: 'Name is required',
+                        minLength: {
+                            value: 5,
+                            message: 'Name must be at least 5 characters'
+                          },
+                          maxLength: {
+                            value: 30,
+                            message: 'Name cannot exceed 30 characters'
+                          },
+                        pattern: {
+                          value: /^[A-Za-z\s]+$/,
+                          message: 'Name can contain only letters and spaces'
+                        }
+                      })}
                     className="w-full pl-10 pr-4 py-3 bg-gray-50 text-gray-900 placeholder-gray-400 border border-gray-200 rounded-xl focus:border-[#5D3C64] focus:ring-2 focus:ring-[#5D3C64]/20 text-base transition-colors duration-200"
                     placeholder="Enter your full name"
                   />
@@ -81,8 +107,10 @@ const Register = () => {
                       required: 'Email is required',
                       pattern: {
                         value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                        message: 'Invalid email address'
-                      }
+                        message: 'Invalid email address. Email must be in the format: example@gmail.com'
+                      },
+                      validate: value =>
+                           !value.includes(' ') || 'Email cannot contain spaces'
                     })}
                     className="w-full pl-10 pr-4 py-3 bg-gray-50 text-gray-900 placeholder-gray-400 border border-gray-200 rounded-xl focus:border-[#5D3C64] focus:ring-2 focus:ring-[#5D3C64]/20 text-base transition-colors duration-200"
                     placeholder="Enter your email"
@@ -101,13 +129,18 @@ const Register = () => {
                   <input
                     id="password"
                     type={showPassword ? 'text' : 'password'}
-                    {...register('password', {
-                      required: 'Password is required',
-                      minLength: {
-                        value: 6,
-                        message: 'Password must be at least 6 characters'
-                      }
-                    })}
+                   {...register('password', {
+                        required: 'Password is required',
+                        minLength: {
+                          value: 8,
+                          message: 'Password must be at least 8 characters'
+                        },
+                        pattern: {
+                          value: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&]).{8,}$/,
+                          message:
+                            'Password must contain uppercase, lowercase, number and special character'
+                        }
+                      })}
                     className="w-full pl-10 pr-10 py-3 bg-gray-50 text-gray-900 placeholder-gray-400 border border-gray-200 rounded-xl focus:border-[#5D3C64] focus:ring-2 focus:ring-[#5D3C64]/20 text-base transition-colors duration-200"
                     placeholder="Please enter your password"
                   />
