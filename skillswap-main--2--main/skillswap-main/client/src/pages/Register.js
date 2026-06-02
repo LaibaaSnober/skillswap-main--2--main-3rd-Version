@@ -50,12 +50,16 @@ const Register = () => {
                     id="name"
                     type="text"
                     {...register('name', {
-                      required: 'Name is required',
-                      minLength: {
-                        value: 2,
-                        message: 'Name must be at least 2 characters'
-                      }
-                    })}
+  required: 'Name is required',
+  minLength: {
+    value: 2,
+    message: 'Name must be at least 2 characters'
+  },
+  pattern: {
+    value: /^[A-Za-z\s]+$/,
+    message: 'Name can contain only letters and spaces'
+  }
+})}
                     className="w-full pl-10 pr-4 py-3 bg-gray-50 text-gray-900 placeholder-gray-400 border border-gray-200 rounded-xl focus:border-[#5D3C64] focus:ring-2 focus:ring-[#5D3C64]/20 text-base transition-colors duration-200"
                     placeholder="Enter your full name"
                   />
