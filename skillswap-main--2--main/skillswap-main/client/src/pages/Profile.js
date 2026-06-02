@@ -148,6 +148,16 @@ const Profile = () => {
   }, [user, updateUser]);
 
   const handleSave = async () => {
+    if (profileData.bio.length > 200) {
+  toast.error("Bio cannot exceed 200 characters");
+  return;
+}
+    if (profileData.name.length < 5) {
+    toast.error("Name must be at least 5 characters");
+    return;
+  }
+
+      setLoading(true);
     try {
       setLoading(true);
       const response = await api.put('/users/profile', {
@@ -169,6 +179,16 @@ const Profile = () => {
   };
 
   const handleAddSkillOffered = async () => {
+    const alreadyExists = user.skillsOffered.some(
+    skill =>
+      skill.name.toLowerCase() === newSkillOffered.name.toLowerCase()
+  );
+
+  if (alreadyExists) {
+    toast.error("Skill already exists");
+    return;
+  }
+
     try {
       const response = await api.post('/users/skills-offered', newSkillOffered);
       updateUser({ ...user, skillsOffered: response.data });
@@ -182,6 +202,14 @@ const Profile = () => {
   };
 
   const handleAddSkillWanted = async () => {
+    const alreadyExists = user.skillsOffered.some(
+    skill =>
+      skill.name.toLowerCase() === newSkillOffered.name.toLowerCase()
+  );
+  if (alreadyExists) {
+    toast.error("Skill already exists");
+    return;
+  }
     try {
       const response = await api.post('/users/skills-wanted', newSkillWanted);
       updateUser({ ...user, skillsWanted: response.data });
@@ -195,6 +223,9 @@ const Profile = () => {
   };
 
   const handleRemoveSkillOffered = async (skillId) => {
+    if (!window.confirm("Remove this skill?")) {
+    return;
+  }
     try {
       const response = await api.delete(`/users/skills-offered/${skillId}`);
       updateUser({ ...user, skillsOffered: response.data });
@@ -206,6 +237,9 @@ const Profile = () => {
   };
 
   const handleRemoveSkillWanted = async (skillId) => {
+    if (!window.confirm("Remove this skill?")) {
+    return;
+  }
     try {
       const response = await api.delete(`/users/skills-wanted/${skillId}`);
       updateUser({ ...user, skillsWanted: response.data });
@@ -275,10 +309,17 @@ const Profile = () => {
     }
   };
 
-  const handleLogout = () => {
+const handleLogout = () => {
+
+  const confirmLogout = window.confirm(
+    "Are you sure you want to logout?"
+  );
+
+  if (confirmLogout) {
     logout();
     navigate('/');
-  };
+  }
+};
 
   // Helper function to get image URL
   const getImageUrl = (photoPath) => {
@@ -292,7 +333,17 @@ const Profile = () => {
   }
 
   const verifiedSkillsCount = (user.skillsOffered || []).filter(s => s.verified === true).length;
-  const githubVerifiedSkills = (user.skillsOffered || []).filter(s => s.verified === true && s.verifiedVia === 'github');
+  const githubVerifiedSkills = (user.skillsOffered || []).filter(s => {
+  return (
+    s.verified === true &&
+    (
+      (s.verifiedVia || '').toLowerCase().includes('github') ||
+      (s.verifiedVia || '').toLowerCase() === 'github'
+    )
+  );
+});
+
+
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-start bg-white pt-2 pb-10 px-2">
@@ -407,25 +458,10 @@ const Profile = () => {
               <form
                 className="space-y-4"
                 onSubmit={async (e) => {
-                  e.preventDefault();
-                  setLoading(true);
-                  try {
-                    const response = await api.put('/users/profile', {
-                      name: profileData.name,
-                      location: profileData.location,
-                      bio: profileData.bio,
-                      isPublic: profileData.isPublic,
-                      availability: profileData.availability
-                    });
-                    updateUser(response.data);
-                    setEditing(false);
-                    toast.success('Profile updated successfully!');
-                  } catch (error) {
-                    toast.error('Failed to update profile');
-                  } finally {
-                    setLoading(false);
-                  }
-                }}
+                
+  e.preventDefault();
+  handleSave();
+}}
               >
                 <div>
                   <label className="block text-[#0C0420] font-semibold mb-1">Name</label>
@@ -491,6 +527,9 @@ const Profile = () => {
                     onChange={e => setProfileData({ ...profileData, bio: e.target.value })}
                     rows={3}
                   />
+                  <div className="text-right text-xs text-gray-500 mt-1">
+                    {profileData.bio.length}/200
+                  </div>
                 </div>
                 <div className="flex items-center gap-3">
                   <input
@@ -820,6 +859,7 @@ const Profile = () => {
                   )}
                 </div>
               </div>
+              
 
               {user.githubStats?.repos?.length > 0 && (
                 <details className="mt-3">
@@ -837,7 +877,7 @@ const Profile = () => {
               <div className="mt-4 p-3 bg-green-500/10 rounded-lg border border-green-500/20">
                 <p className="text-sm text-green-300 flex items-center gap-2">
                   <CheckCircle className="w-4 h-4" />
-                  {githubVerifiedSkills.length} verified skills have been automatically added to your "Skills Offered" section above with verification badges.
+                 {user.verifiedSkills?.length || 0} verified skills have been automatically added to your "Skills Offered" section above with verification badges.
                 </p>
               </div>
             </>
